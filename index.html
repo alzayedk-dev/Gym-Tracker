@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gym Tracker</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Gym Tracker</h1>
+    <div id="user-bar" hidden>
+      <span id="user-email"></span>
+      <button id="sign-out" class="link">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Login / sign up -->
+    <section id="auth-view" class="card" hidden>
+      <h2 id="auth-title">Log in</h2>
+      <form id="auth-form">
+        <label>Email <input type="email" id="auth-email" required autocomplete="email"></label>
+        <label>Password <input type="password" id="auth-password" required minlength="6" autocomplete="current-password"></label>
+        <button type="submit" id="auth-submit">Log in</button>
+      </form>
+      <p id="auth-message" class="message"></p>
+      <p class="switch">
+        <span id="auth-switch-text">No account yet?</span>
+        <button id="auth-switch" class="link">Sign up</button>
+      </p>
+    </section>
+
+    <!-- Logged in -->
+    <section id="app-view" hidden>
+      <div class="card">
+        <h2>Add exercise</h2>
+        <form id="workout-form" class="grid">
+          <label>Date <input type="date" id="entry-date" required></label>
+          <label class="wide">Exercise <input type="text" id="exercise" required placeholder="e.g. Bench Press"></label>
+          <label>Sets <input type="number" id="sets" required min="1" step="1"></label>
+          <label>Reps <input type="number" id="reps" required min="1" step="1"></label>
+          <label>Weight <input type="number" id="weight" min="0" step="0.5" placeholder="optional"></label>
+          <label class="check"><input type="checkbox" id="completed"> Completed</label>
+          <button type="submit" class="wide">Add</button>
+        </form>
+        <p id="form-message" class="message"></p>
+      </div>
+
+      <div id="workout-list"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
