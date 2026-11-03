@@ -61,3 +61,47 @@ One row each time you press **Mark done**.
 | `created_at`   | Date and time, filled in automatically                    | When you pressed the button. |
 
 Rule: the same workout can only be marked done **once per date**, so nothing is counted twice.
+
+## Example rows
+
+Here's what the tables look like for one person who trains Monday and Thursday. (`id`, `user_id` and `created_at` are left out to keep it readable.)
+
+### `workout`
+
+| day_of_week | workout_type |
+|-------------|--------------|
+| Monday      | Upper        |
+| Thursday    | Legs         |
+
+Tuesday, Wednesday, Friday, Saturday and Sunday have no row, so they're rest days.
+
+### `exercises`
+
+| day_of_week | exercise    | muscle_groups | sets | reps  | weights      | weight_unit | rest_seconds | Shown on the site as |
+|-------------|-------------|---------------|------|-------|--------------|-------------|--------------|----------------------|
+| Monday      | Bench Press | Chest, Arms   | 3    | 8     | 60, 65, 70   | kg          | 90           | 1 min 30 sec rest    |
+| Monday      | Curls       | Arms          | 3    | 12    | 25, 25, 20   | lbs         | 60           | 1 min rest           |
+| Monday      | Push-ups    | Chest         | 1    | AMRAP | *(empty)*    | kg          | *(empty)*    | No rest set          |
+| Thursday    | Squat       | Legs, Core    | 5    | 5     | 100          | kg          | 120          | 2 min rest           |
+| Thursday    | Pull-ups    | Back, Arms    | 3    | Max   | *(empty)*    | kg          | 75           | 1 min 15 sec rest    |
+| Thursday    | Plank       | Core          | *(empty)* | *(empty)* | *(empty)* | kg     | *(empty)*    | Just the name        |
+
+- Monday's workout has 3 exercises and Thursday's has 3. A workout can have as many as you like.
+- **Bench Press** gets heavier each set, so it has three weights, one per set.
+- **Squat** uses the same weight for every set, so one number is enough.
+- **Push-ups** and **Pull-ups** use `AMRAP` / `Max` instead of a number, and have no weight because they're bodyweight.
+- **Plank** only has a name, since that's the only required field.
+- **Curls** are in lbs and the rest are in kg. Each exercise keeps its own unit.
+- Rest is stored in seconds (`90`) but shown as minutes and seconds (`1 min 30 sec`).
+
+### `workout_completions`
+
+| completed_on | day_of_week | workout_type |
+|--------------|-------------|--------------|
+| 2026-11-02   | Monday      | Upper        |
+| 2026-11-05   | Thursday    | Legs         |
+| 2026-11-09   | Monday      | Upper        |
+| 2026-11-11   | Thursday    | Legs         |
+
+- If today is 11 Nov 2026, **this week** (Mon 9 – Sun 15 Nov) shows **2 workouts** and **this month** shows **4 workouts**.
+- The 11 Nov row is a Wednesday, but it records Thursday's workout. That's how a workout done on a different day than planned is logged.
