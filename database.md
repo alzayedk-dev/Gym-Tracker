@@ -105,3 +105,41 @@ Tuesday, Wednesday, Friday, Saturday and Sunday have no row, so they're rest day
 
 - If today is 11 Nov 2026, **this week** (Mon 9 – Sun 15 Nov) shows **2 workouts** and **this month** shows **4 workouts**.
 - The 11 Nov row is a Wednesday, but it records Thursday's workout. That's how a workout done on a different day than planned is logged.
+
+## Questions
+
+**Why three tables instead of one?**
+A workout (Monday – Upper) holds many exercises. If everything were in one table, "Monday – Upper" would be repeated on every exercise row, and changing Monday to "Push" would mean editing every row. Keeping workouts, exercises and completions apart means each fact is stored once.
+
+**Can other people see my workouts?**
+No. Every table has a `user_id`, and the database itself only lets you read or change rows with your own ID. Even if someone changed the website's code, the database would still refuse.
+
+**What happens if I remove a day from my plan?**
+Its row in `workout` is deleted, and all of that day's exercises are deleted with it. Your `workout_completions` history is **kept**, so past workouts still count.
+
+**What happens if I change a day's workout type?**
+The plan changes, but past completions keep the type you actually did. If Monday was "Upper" when you finished it, the history still says "Upper" after you switch Monday to "Push".
+
+**Why is `reps` text and not a number?**
+So it can hold `AMRAP` or `Max` as well as numbers like `10`. Typing `amrap` or `max` in any capitalisation is saved as `AMRAP` / `Max`.
+
+**How do I enter different weights for each set?**
+Type them separated by commas, e.g. `60, 65, 70`. One number is fine if every set uses the same weight. Leave it empty for bodyweight.
+
+**Does switching kg ↔ lbs convert the numbers?**
+No. The switch only changes the label. If an exercise says `60` kg and you switch to lbs, it becomes `60` lbs. It's for picking the right unit, not for converting.
+
+**Why is rest stored in seconds?**
+Seconds are one simple number that's easy to check and sort. The database only accepts multiples of 15 (15, 30, 45, 60, 75…), and the website turns them into `45 sec`, `1 min`, `1 min 15 sec` and so on, up to 10 min.
+
+**How are "this week" and "this month" counted?**
+By counting rows in `workout_completions`. A week runs Monday to Sunday. Marking two different workouts done on the same date counts as two.
+
+**Can I mark the same workout done twice on one day?**
+No. The database blocks a second identical entry for the same date. Use **Undo** in the Progress tab if you marked the wrong date.
+
+**Where is the login information stored?**
+In Supabase's own built-in user list (`auth.users`), not in these tables. Passwords are handled entirely by Supabase and are never stored in plain text.
+
+**Where is the SQL that created these tables?**
+In [`supabase/migrations`](supabase/migrations), one file per change, in the order they were run.
