@@ -240,21 +240,29 @@ button.google::before {
   background: var(--field); border-radius: 999px; padding: 2px 8px;
 }
 
-/* Editable sets / reps / weight */
-.nums { display: flex; gap: 6px; align-items: flex-start; }
-.num { margin: 0; gap: 2px; align-items: center; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.num input {
-  width: 62px;
-  padding: 8px 4px;
-  text-align: center;
-  font-size: 1.05rem;
-  font-weight: 700;
-  -moz-appearance: textfield;
+/* Editable sets / reps / weights / rest: a row under the exercise name */
+.entry:has(.nums) { flex-wrap: wrap; }
+.entry:has(.nums) .name { flex-basis: calc(100% - 60px); }
+.nums {
+  order: 3;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.4fr);
+  gap: 6px;
+  align-items: start;
 }
-.num input::-webkit-outer-spin-button,
-.num input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.num input.saved { border-color: var(--done); }
+.num { margin: 0; gap: 2px; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.num input, .num select {
+  width: 100%;
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.num select { text-align-last: center; font-size: 0.85rem; }
+.num input.saved, .num select.saved { border-color: var(--done); }
 .num-weight { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.num-weight .num { width: 100%; }
 .num-weight .unit-toggle button { padding: 3px 8px; font-size: 0.7rem; }
 
 /* kg | lbs switch */
@@ -351,10 +359,5 @@ legend { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid .field { grid-column: 1 / -1; }
   .grid .wide { grid-column: 1 / -1; }
-  .entry { flex-wrap: wrap; }
-  .entry .name { flex-basis: calc(100% - 50px); }
-  .entry .nums { order: 3; width: 100%; }
-  .num, .num-weight { flex: 1; }
-  .num-weight .num { width: 100%; }
-  .num input { width: 100%; }
+  .nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -12,7 +12,7 @@ const UNITS = ["kg", "lbs"];
 const $ = (id) => document.getElementById(id);
 
 let currentUser = null;
-let days = [];        // workout_days rows
+let days = [];        // workout rows (one per planned day)
 let exercises = [];   // exercises rows
 let completions = []; // workout_completions rows
 
@@ -164,7 +164,7 @@ document.querySelectorAll(".tabs button").forEach((btn) =>
 
 async function loadAll() {
   const [d, e, c] = await Promise.all([
-    db.from("workout_days").select("*"),
+    db.from("workout").select("*"),
     db.from("exercises").select("*").order("created_at"),
     db.from("workout_completions").select("*").order("completed_on", { ascending: false }),
   ]);
@@ -219,7 +219,7 @@ function dayCard(day, dayExercises) {
   fillSelect(typeSelect, TYPES);
   typeSelect.value = day.workout_type;
   typeSelect.addEventListener("change", async () => {
-    const { error } = await db.from("workout_days").update({ workout_type: typeSelect.value }).eq("id", day.id);
+    const { error } = await db.from("workout").update({ workout_type: typeSelect.value }).eq("id", day.id);
     if (error) return showMessage("app-message", error.message, true);
     loadAll();
   });
@@ -255,7 +255,7 @@ function dayCard(day, dayExercises) {
   const removeDay = el("button", { className: "link danger small", textContent: "Remove day" });
   removeDay.addEventListener("click", async () => {
     if (!confirm(`Remove ${day.day_of_week} and all its exercises from your plan?`)) return;
-    const { error } = await db.from("workout_days").delete().eq("id", day.id);
+    const { error } = await db.from("workout").delete().eq("id", day.id);
     if (error) return showMessage("app-message", error.message, true);
     loadAll();
   });
@@ -264,38 +264,106 @@ function dayCard(day, dayExercises) {
   return card;
 }
 
-// A small number box that saves to the exercise as soon as it's changed.
-function editableNumber(x, field, label, opts) {
-  const input = el("input", {
-    type: "number", inputMode: "decimal", value: x[field] ?? "", ...opts,
-  });
+// ---------- Exercise fields: read what was typed, show what's stored ----------
+// Each parser returns the value to save (null = empty) or throws a message to show.
+
+const FIELDS = {
+  sets: {
+    parse(s) {
+      s = s.trim();
+      if (!s) return null;
+      if (!/^\d+$/.test(s) || Number(s) < 1) throw "Sets must be a whole number like 3.";
+      return Number(s);
+    },
+    format: (v) => (v == null ? "" : String(v)),
+  },
+  reps: {
+    parse(s) {
+      s = s.trim();
+      if (!s) return null;
+      if (s.length > 20) throw "Reps must be 20 characters or less.";
+      return /^amrap$/i.test(s) ? "AMRAP" : /^max$/i.test(s) ? "Max" : s;
+    },
+    format: (v) => v ?? "",
+  },
+  weights: {
+    parse(s) {
+      const parts = s.split(/[,\s]+/).filter(Boolean);
+      if (!parts.length) return null;
+      const nums = parts.map(Number);
+      if (nums.some((n) => !Number.isFinite(n) || n < 0)) throw "Weights must be numbers, e.g. 60, 65, 70.";
+      return nums;
+    },
+    format: (v) => (v?.length ? v.map(Number).join(", ") : ""),
+  },
+};
+
+// 15 sec, 30 sec, 45 sec, 1 min, 1 min 15 sec ... up to 10 min.
+const REST_OPTIONS = Array.from({ length: 40 }, (_, i) => (i + 1) * 15);
+function formatRest(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (!m) return `${s} sec`;
+  return s ? `${m} min ${s} sec` : `${m} min`;
+}
+function fillRestSelect(select, value) {
+  select.innerHTML = "";
+  select.append(el("option", { value: "", textContent: "No rest set" }));
+  for (const s of REST_OPTIONS) select.append(el("option", { value: s, textContent: formatRest(s) }));
+  select.value = value ?? "";
+}
+
+function flashSaved(node) {
+  node.classList.add("saved");
+  setTimeout(() => node.classList.remove("saved"), 800);
+}
+
+async function saveExercise(x, field, value) {
+  const { error } = await db.from("exercises").update({ [field]: value }).eq("id", x.id);
+  if (error) { showMessage("app-message", error.message, true); return false; }
+  x[field] = value;
+  return true;
+}
+
+// A small text box that saves to the exercise as soon as it's changed.
+function editableField(x, field, label, opts) {
+  const { parse, format } = FIELDS[field];
+  const input = el("input", { type: "text", value: format(x[field]), ...opts });
   input.addEventListener("change", async () => {
-    const raw = input.value;
-    const value = raw === "" ? null : Number(raw);
-    if (value === null && field !== "weight") { input.value = x[field]; return; }
-    if (!input.checkValidity()) { input.value = x[field] ?? ""; return; }
-    const { error } = await db.from("exercises").update({ [field]: value }).eq("id", x.id);
-    if (error) { input.value = x[field] ?? ""; return showMessage("app-message", error.message, true); }
-    x[field] = value;
-    input.classList.add("saved");
-    setTimeout(() => input.classList.remove("saved"), 800);
+    let value;
+    try { value = parse(input.value); } catch (msg) {
+      input.value = format(x[field]);
+      return showMessage("app-message", msg, true);
+    }
+    if (!(await saveExercise(x, field, value))) return (input.value = format(x[field]));
+    input.value = format(value);
+    showMessage("app-message", "");
+    flashSaved(input);
   });
   return el("label", { className: "num" }, el("span", { textContent: label }), input);
 }
 
 function exerciseRow(x) {
   const tags = el("div", { className: "tags" }, ...x.muscle_groups.map((m) => el("span", { className: "tag", textContent: m })));
+
+  const rest = el("select");
+  fillRestSelect(rest, x.rest_seconds);
+  rest.addEventListener("change", async () => {
+    const value = rest.value === "" ? null : Number(rest.value);
+    if (await saveExercise(x, "rest_seconds", value)) flashSaved(rest);
+    else rest.value = x.rest_seconds ?? "";
+  });
+
   const detail = el("div", { className: "nums" },
-    editableNumber(x, "sets", "Sets", { min: 1, step: 1 }),
-    editableNumber(x, "reps", "Reps", { min: 1, step: 1 }),
+    editableField(x, "sets", "Sets", { inputMode: "numeric", placeholder: "–" }),
+    editableField(x, "reps", "Reps", { placeholder: "–" }),
     el("div", { className: "num-weight" },
-      editableNumber(x, "weight", "Weight", { min: 0, step: 0.5, placeholder: "–" }),
+      editableField(x, "weights", "Weight per set", { inputMode: "decimal", placeholder: "–" }),
       unitToggle(x.weight_unit, async (u) => {
-        const { error } = await db.from("exercises").update({ weight_unit: u }).eq("id", x.id);
-        if (error) { showMessage("app-message", error.message, true); return false; }
-        x.weight_unit = u;
+        if (!(await saveExercise(x, "weight_unit", u))) return false;
         rememberUnit(u);
-      })));
+      })),
+    el("label", { className: "num" }, el("span", { textContent: "Rest" }), rest));
   const del = el("button", { className: "delete", textContent: "✕", title: "Delete exercise" });
   del.addEventListener("click", async () => {
     if (!confirm(`Delete ${x.exercise}?`)) return;
@@ -345,6 +413,7 @@ fillSelect($("ex-type"), TYPES);
 $("ex-day").value = todayName();
 const exUnit = unitToggle(savedUnit(), (u) => rememberUnit(u));
 $("ex-unit").replaceWith(exUnit);
+fillRestSelect($("ex-rest"));
 for (const m of MUSCLES) {
   $("ex-muscles").append(el("label", { className: "chip" }, el("input", { type: "checkbox", value: m }), m));
 }
@@ -361,9 +430,17 @@ $("exercise-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const day = $("ex-day").value;
   const muscles = [...$("ex-muscles").querySelectorAll("input:checked")].map((i) => i.value);
-  const weight = $("ex-weight").value;
 
-  const { error: dayError } = await db.from("workout_days").upsert(
+  let sets, reps, weights;
+  try {
+    sets = FIELDS.sets.parse($("ex-sets").value);
+    reps = FIELDS.reps.parse($("ex-reps").value);
+    weights = FIELDS.weights.parse($("ex-weights").value);
+  } catch (msg) {
+    return showMessage("app-message", msg, true);
+  }
+
+  const { error: dayError } = await db.from("workout").upsert(
     { user_id: currentUser.id, day_of_week: day, workout_type: $("ex-type").value },
     { onConflict: "user_id,day_of_week" }
   );
@@ -373,15 +450,16 @@ $("exercise-form").addEventListener("submit", async (e) => {
     day_of_week: day,
     exercise: $("ex-name").value.trim(),
     muscle_groups: muscles,
-    sets: Number($("ex-sets").value),
-    reps: Number($("ex-reps").value),
-    weight: weight === "" ? null : Number(weight),
+    sets,
+    reps,
+    weights,
     weight_unit: exUnit.value,
+    rest_seconds: $("ex-rest").value === "" ? null : Number($("ex-rest").value),
   });
   if (error) return showMessage("app-message", error.message, true);
 
   showMessage("app-message", `Added ${$("ex-name").value.trim()} to ${day}.`);
-  for (const id of ["ex-name", "ex-sets", "ex-reps", "ex-weight"]) $(id).value = "";
+  for (const id of ["ex-name", "ex-sets", "ex-reps", "ex-weights", "ex-rest"]) $(id).value = "";
   $("ex-muscles").querySelectorAll("input").forEach((i) => (i.checked = false));
   $("ex-name").focus();
   loadAll();

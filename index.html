@@ -82,18 +82,19 @@
               <legend>Muscle groups</legend>
               <div id="ex-muscles" class="chips"></div>
             </fieldset>
-            <label>Sets <input type="number" id="ex-sets" required min="1" step="1"></label>
-            <label>Reps <input type="number" id="ex-reps" required min="1" step="1"></label>
-            <div class="field">
-              <label for="ex-weight">Weight</label>
+            <label>Sets <input type="text" id="ex-sets" inputmode="numeric" placeholder="optional"></label>
+            <label>Reps <input type="text" id="ex-reps" placeholder="e.g. 10, AMRAP, max"></label>
+            <label>Rest <select id="ex-rest"></select></label>
+            <div class="field full">
+              <label for="ex-weights">Weight per set</label>
               <div class="weight-row">
-                <input type="number" id="ex-weight" min="0" step="0.5" placeholder="optional">
+                <input type="text" id="ex-weights" inputmode="decimal" placeholder="optional, e.g. 60, 65, 70">
                 <div id="ex-unit"></div>
               </div>
             </div>
             <button type="submit" class="full">Add to plan</button>
           </form>
-          <p class="hint">If the day already has a workout type, picking a different one changes it for that day.</p>
+          <p class="hint">Only the exercise name is required. If the day already has a workout type, picking a different one changes it for that day.</p>
         </div>
       </div>
     </section>
