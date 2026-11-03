@@ -1,8 +1,8 @@
 # Lets train 💪
 
-A gym tracker website. People log in (email/password or Google), build a weekly workout plan, edit sets/reps/weight as they train, and mark workouts done to see how many they did this week and month. Data is stored in Supabase.
+A gym tracker website. People log in, build workouts, and track the sets, reps and weights they actually do each session. Data is stored in Supabase. Live at https://letstrain-iota.vercel.app (deployed by Vercel on every push to `main`).
 
-## Running it
+## Running it locally
 
 Plain HTML/CSS/JS, no build step. Serve the folder with any static server, e.g.:
 
@@ -12,20 +12,20 @@ npx serve .
 
 ## Features
 
-- **Schedule**: the week's plan, filterable by day, workout type (Upper, Lower, Push, Pull, Legs, Full body, Cardio) or muscle group (Chest, Back, Arms, Shoulders, Legs, Core, Full body).
-- **Edit as you go**: sets, reps (a number, AMRAP or max), weight per set, kg/lbs and rest time are editable in place and save automatically. Only the exercise name is required.
-- **Mark done**: mark a day's workout completed on any date.
-- **Progress**: workouts this week / this month and full history.
+- **New workout**: pick one type (Full body, Upper, Lower), then weekdays (recurring every week) or exact dates (one-off), then add as many exercises as you like: name, sets, reps (a number, AMRAP or max), weight per set, kg/lbs and rest time. Save with **Lets train**.
+- **This week**: every workout on every date, with a **Completed** box. Sets, reps and weights are editable and saved for that date, pre-filled from last time. Filter by type or muscle; step back and forward through weeks.
+- **Progress**: completed workouts this week / this month and the full list.
 
 ## Database
 
 See [database.md](database.md) for a plain-English guide to every table and column.
 
-| Table                 | What it holds                                                              |
-|-----------------------|----------------------------------------------------------------------------|
-| `workout`             | A user's weekly plan: one workout per training day with its `workout_type`. |
-| `exercises`           | The 1 or more exercises in a workout: name, muscle groups, sets, reps, weights, kg/lbs, rest. |
-| `workout_completions` | One row each time a workout is marked done on `completed_on`.             |
+| Table               | What it holds                                                       |
+|---------------------|---------------------------------------------------------------------|
+| `workout`           | A planned workout: type, recurring weekdays or one-off dates.      |
+| `exercises`         | The exercises in a workout, with the planned numbers.              |
+| `sessions`          | One workout on one date, with the Completed tick.                  |
+| `session_exercises` | What was actually done for each exercise in a session.             |
 
 Every table has a `user_id` and Row Level Security, so users only see and change their own rows.
 
