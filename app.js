@@ -7,6 +7,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const TYPES = ["Upper", "Lower", "Push", "Pull", "Legs", "Full body", "Cardio"];
 const MUSCLES = ["Chest", "Back", "Arms", "Shoulders", "Legs", "Core", "Full body"];
+const UNITS = ["kg", "lbs"];
 
 const $ = (id) => document.getElementById(id);
 
@@ -54,6 +55,38 @@ function startOfMonth() {
   const d = new Date();
   return isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
 }
+// A two-option switch (kg | lbs). Calls onChange with the new value.
+function unitToggle(value, onChange) {
+  const wrap = el("div", { className: "unit-toggle", role: "radiogroup", ariaLabel: "Weight unit" });
+  const buttons = UNITS.map((u) => {
+    const b = el("button", { type: "button", textContent: u, role: "radio" });
+    b.addEventListener("click", async () => {
+      if (u === wrap.value) return;
+      if ((await onChange(u)) === false) return;
+      set(u);
+    });
+    return b;
+  });
+  function set(u) {
+    wrap.value = u;
+    buttons.forEach((b) => {
+      b.classList.toggle("on", b.textContent === u);
+      b.ariaChecked = String(b.textContent === u);
+    });
+  }
+  wrap.append(...buttons);
+  set(value);
+  return wrap;
+}
+
+// Remember the last unit picked on this device for new exercises.
+function savedUnit() {
+  try { return localStorage.getItem("weightUnit") === "lbs" ? "lbs" : "kg"; } catch { return "kg"; }
+}
+function rememberUnit(u) {
+  try { localStorage.setItem("weightUnit", u); } catch {}
+}
+
 function prettyDate(s) {
   return parseDate(s).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
@@ -255,7 +288,14 @@ function exerciseRow(x) {
   const detail = el("div", { className: "nums" },
     editableNumber(x, "sets", "Sets", { min: 1, step: 1 }),
     editableNumber(x, "reps", "Reps", { min: 1, step: 1 }),
-    editableNumber(x, "weight", "Weight", { min: 0, step: 0.5, placeholder: "–" }));
+    el("div", { className: "num-weight" },
+      editableNumber(x, "weight", "Weight", { min: 0, step: 0.5, placeholder: "–" }),
+      unitToggle(x.weight_unit, async (u) => {
+        const { error } = await db.from("exercises").update({ weight_unit: u }).eq("id", x.id);
+        if (error) { showMessage("app-message", error.message, true); return false; }
+        x.weight_unit = u;
+        rememberUnit(u);
+      })));
   const del = el("button", { className: "delete", textContent: "✕", title: "Delete exercise" });
   del.addEventListener("click", async () => {
     if (!confirm(`Delete ${x.exercise}?`)) return;
@@ -303,6 +343,8 @@ function renderProgress() {
 fillSelect($("ex-day"), DAYS);
 fillSelect($("ex-type"), TYPES);
 $("ex-day").value = todayName();
+const exUnit = unitToggle(savedUnit(), (u) => rememberUnit(u));
+$("ex-unit").replaceWith(exUnit);
 for (const m of MUSCLES) {
   $("ex-muscles").append(el("label", { className: "chip" }, el("input", { type: "checkbox", value: m }), m));
 }
@@ -334,6 +376,7 @@ $("exercise-form").addEventListener("submit", async (e) => {
     sets: Number($("ex-sets").value),
     reps: Number($("ex-reps").value),
     weight: weight === "" ? null : Number(weight),
+    weight_unit: exUnit.value,
   });
   if (error) return showMessage("app-message", error.message, true);
 

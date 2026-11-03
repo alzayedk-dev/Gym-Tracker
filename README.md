@@ -22,7 +22,7 @@ npx serve .
 | Table                 | What it holds                                                              |
 |-----------------------|----------------------------------------------------------------------------|
 | `workout_days`        | A user's weekly plan: one row per training day with its `workout_type`.   |
-| `exercises`           | Exercises for a day: `exercise`, `muscle_groups[]`, `sets`, `reps`, `weight`. |
+| `exercises`           | Exercises for a day: `exercise`, `muscle_groups[]`, `sets`, `reps`, `weight`, `weight_unit` (kg/lbs). |
 | `workout_completions` | One row each time a day's workout is marked done on `completed_on`.       |
 
 Every table has a `user_id` and Row Level Security, so users only see and change their own rows.

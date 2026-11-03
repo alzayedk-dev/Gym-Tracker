@@ -241,7 +241,7 @@ button.google::before {
 }
 
 /* Editable sets / reps / weight */
-.nums { display: flex; gap: 6px; }
+.nums { display: flex; gap: 6px; align-items: flex-start; }
 .num { margin: 0; gap: 2px; align-items: center; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .num input {
   width: 62px;
@@ -254,6 +254,33 @@ button.google::before {
 .num input::-webkit-outer-spin-button,
 .num input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .num input.saved { border-color: var(--done); }
+.num-weight { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.num-weight .unit-toggle button { padding: 3px 8px; font-size: 0.7rem; }
+
+/* kg | lbs switch */
+.unit-toggle {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--field);
+  border-radius: 999px;
+}
+.unit-toggle button {
+  background: none;
+  color: var(--muted);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.unit-toggle button.on {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+}
+
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field > label { margin: 0; }
+.weight-row { display: flex; gap: 8px; align-items: center; }
+.weight-row input { flex: 1; min-width: 0; }
 
 .day-foot {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
@@ -277,10 +304,11 @@ button.google::before {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0 12px;
   align-items: end;
 }
+.grid input, .grid select { width: 100%; }
 .grid .wide { grid-column: span 2; }
 .grid .full { grid-column: 1 / -1; }
 
@@ -320,11 +348,13 @@ legend { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom
 @media (max-width: 560px) {
   .filters { grid-template-columns: 1fr 1fr; }
   .filters label:first-child { grid-column: 1 / -1; }
-  .grid { grid-template-columns: 1fr 1fr; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid .field { grid-column: 1 / -1; }
   .grid .wide { grid-column: 1 / -1; }
   .entry { flex-wrap: wrap; }
   .entry .name { flex-basis: calc(100% - 50px); }
   .entry .nums { order: 3; width: 100%; }
-  .num { flex: 1; }
+  .num, .num-weight { flex: 1; }
+  .num-weight .num { width: 100%; }
   .num input { width: 100%; }
 }

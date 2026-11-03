@@ -84,7 +84,13 @@
             </fieldset>
             <label>Sets <input type="number" id="ex-sets" required min="1" step="1"></label>
             <label>Reps <input type="number" id="ex-reps" required min="1" step="1"></label>
-            <label>Weight <input type="number" id="ex-weight" min="0" step="0.5" placeholder="optional"></label>
+            <div class="field">
+              <label for="ex-weight">Weight</label>
+              <div class="weight-row">
+                <input type="number" id="ex-weight" min="0" step="0.5" placeholder="optional">
+                <div id="ex-unit"></div>
+              </div>
+            </div>
             <button type="submit" class="full">Add to plan</button>
           </form>
           <p class="hint">If the day already has a workout type, picking a different one changes it for that day.</p>
