@@ -5,28 +5,31 @@ const SUPABASE_KEY = "sb_publishable_v7iY0ay8IGvxuRMCBrqz0w_LHlckcaw";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const TYPES = ["Upper", "Lower", "Push", "Pull", "Legs", "Full body", "Cardio"];
+const TYPES = ["Full body", "Upper", "Lower"];
 const MUSCLES = ["Chest", "Back", "Arms", "Shoulders", "Legs", "Core", "Full body"];
 const UNITS = ["kg", "lbs"];
 
 const $ = (id) => document.getElementById(id);
 
 let currentUser = null;
-let days = [];        // workout rows (one per planned day)
-let exercises = [];   // exercises rows
-let completions = []; // workout_completions rows
+let workouts = [];  // workout rows (the plan)
+let exercises = []; // exercises planned in each workout
+let sessions = [];  // one workout on one date, with the completed tick
+let logs = [];      // session_exercises: what was actually done
+let weekStart = startOfWeek(today());
+let typeFilter = "";
 
 // ---------- Helpers ----------
 
 function showMessage(id, text, isError = false) {
-  const el = $(id);
-  el.textContent = text;
-  el.classList.toggle("error", isError);
+  const node = $(id);
+  node.textContent = text;
+  node.classList.toggle("error", isError);
 }
 
 function el(tag, props = {}, ...children) {
   const node = Object.assign(document.createElement(tag), props);
-  node.append(...children);
+  node.append(...children.filter((c) => c != null && c !== false));
   return node;
 }
 
@@ -36,7 +39,7 @@ function fillSelect(select, options, allLabel) {
   for (const o of options) select.append(el("option", { value: o, textContent: o }));
 }
 
-// Dates as local YYYY-MM-DD strings so nothing shifts by timezone.
+// Dates are local YYYY-MM-DD strings so nothing shifts by timezone.
 function isoDate(d) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
@@ -45,17 +48,71 @@ function parseDate(s) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
-function todayName() { return DAYS[(new Date().getDay() + 6) % 7]; }
-function startOfWeek() {
-  const d = new Date();
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
+function addDays(s, n) {
+  const d = parseDate(s);
+  d.setDate(d.getDate() + n);
   return isoDate(d);
 }
-function startOfMonth() {
-  const d = new Date();
-  return isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+function dayName(s) { return DAYS[(parseDate(s).getDay() + 6) % 7]; }
+function startOfWeek(s) { return addDays(s, -((parseDate(s).getDay() + 6) % 7)); }
+function localDateOf(timestamp) { return isoDate(new Date(timestamp)); }
+function shortDate(s) {
+  return parseDate(s).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
-// A two-option switch (kg | lbs). Calls onChange with the new value.
+function longDate(s) {
+  return parseDate(s).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+}
+
+// ---------- Field parsing ----------
+// Each parser returns the value to save (null = empty) or throws a message to show.
+
+const FIELDS = {
+  sets: {
+    parse(s) {
+      s = s.trim();
+      if (!s) return null;
+      if (!/^\d+$/.test(s) || Number(s) < 1) throw "Sets must be a whole number like 3.";
+      return Number(s);
+    },
+    format: (v) => (v == null ? "" : String(v)),
+  },
+  reps: {
+    parse(s) {
+      s = s.trim();
+      if (!s) return null;
+      if (s.length > 20) throw "Reps must be 20 characters or less.";
+      return /^amrap$/i.test(s) ? "AMRAP" : /^max$/i.test(s) ? "Max" : s;
+    },
+    format: (v) => v ?? "",
+  },
+  weights: {
+    parse(s) {
+      const parts = s.split(/[,\s]+/).filter(Boolean);
+      if (!parts.length) return null;
+      const nums = parts.map(Number);
+      if (nums.some((n) => !Number.isFinite(n) || n < 0)) throw "Weights must be numbers, e.g. 60, 65, 70.";
+      return nums;
+    },
+    format: (v) => (v?.length ? v.map(Number).join(", ") : ""),
+  },
+};
+
+// 15 sec, 30 sec, 45 sec, 1 min, 1 min 15 sec ... up to 10 min.
+const REST_OPTIONS = Array.from({ length: 40 }, (_, i) => (i + 1) * 15);
+function formatRest(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (!m) return `${s} sec`;
+  return s ? `${m} min ${s} sec` : `${m} min`;
+}
+function fillRestSelect(select, value) {
+  select.innerHTML = "";
+  select.append(el("option", { value: "", textContent: "No rest set" }));
+  for (const s of REST_OPTIONS) select.append(el("option", { value: s, textContent: formatRest(s) }));
+  select.value = value ?? "";
+}
+
+// A two-option switch (kg | lbs). onChange may return false (or a promise of false) to cancel.
 function unitToggle(value, onChange) {
   const wrap = el("div", { className: "unit-toggle", role: "radiogroup", ariaLabel: "Weight unit" });
   const buttons = UNITS.map((u) => {
@@ -87,8 +144,17 @@ function rememberUnit(u) {
   try { localStorage.setItem("weightUnit", u); } catch {}
 }
 
-function prettyDate(s) {
-  return parseDate(s).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+function flashSaved(node) {
+  node.classList.add("saved");
+  setTimeout(() => node.classList.remove("saved"), 800);
+}
+
+function planSummary(x) {
+  const parts = [];
+  if (x.sets || x.reps) parts.push(`${x.sets ?? "–"} × ${x.reps ?? "–"}`);
+  if (x.weights?.length) parts.push(`${FIELDS.weights.format(x.weights)} ${x.weight_unit}`);
+  if (x.rest_seconds) parts.push(`rest ${formatRest(x.rest_seconds)}`);
+  return parts.join(" · ");
 }
 
 // ---------- Auth ----------
@@ -152,315 +218,462 @@ db.auth.onAuthStateChange((_event, session) => {
 
 // ---------- Tabs ----------
 
-document.querySelectorAll(".tabs button").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b === btn));
-    for (const t of ["schedule", "progress", "add"]) $("tab-" + t).hidden = t !== btn.dataset.tab;
-    showMessage("app-message", "");
-  })
-);
+function showTab(name) {
+  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  for (const t of ["week", "new", "progress"]) $("tab-" + t).hidden = t !== name;
+  showMessage("app-message", "");
+}
+document.querySelectorAll(".tabs button").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
 
 // ---------- Data ----------
 
 async function loadAll() {
-  const [d, e, c] = await Promise.all([
-    db.from("workout").select("*"),
-    db.from("exercises").select("*").order("created_at"),
-    db.from("workout_completions").select("*").order("completed_on", { ascending: false }),
+  const [w, e, s, l] = await Promise.all([
+    db.from("workout").select("*").order("created_at"),
+    db.from("exercises").select("*").order("position").order("created_at"),
+    db.from("sessions").select("*"),
+    db.from("session_exercises").select("*"),
   ]);
-  const error = d.error || e.error || c.error;
+  const error = w.error || e.error || s.error || l.error;
   if (error) return showMessage("app-message", error.message, true);
-  days = d.data.sort((a, b) => DAYS.indexOf(a.day_of_week) - DAYS.indexOf(b.day_of_week));
+  workouts = w.data;
   exercises = e.data;
-  completions = c.data;
-  renderSchedule();
+  sessions = s.data;
+  logs = l.data;
+  renderWeek();
   renderProgress();
 }
 
-// ---------- Schedule ----------
+const findSession = (workoutId, date) => sessions.find((s) => s.workout_id === workoutId && s.session_date === date);
+const exercisesOf = (workoutId) => exercises.filter((x) => x.workout_id === workoutId);
 
-fillSelect($("filter-day"), DAYS, "All days");
-fillSelect($("filter-type"), TYPES, "All types");
-fillSelect($("filter-muscle"), MUSCLES, "All muscles");
-for (const id of ["filter-day", "filter-type", "filter-muscle"]) $(id).addEventListener("change", renderSchedule);
-
-function renderSchedule() {
-  const dayF = $("filter-day").value;
-  const typeF = $("filter-type").value;
-  const muscleF = $("filter-muscle").value;
-  const list = $("schedule-list");
-  list.innerHTML = "";
-
-  if (!days.length) {
-    list.append(el("div", { className: "card empty", textContent: "Your plan is empty. Use \"Add exercise\" to build your week." }));
-    return;
+// Create the session row for a workout on a date the first time it's needed.
+const pendingSessions = new Map();
+async function ensureSession(w, date) {
+  const existing = findSession(w.id, date);
+  if (existing) return existing;
+  const key = `${w.id}|${date}`;
+  if (!pendingSessions.has(key)) {
+    pendingSessions.set(key, (async () => {
+      const { data, error } = await db.from("sessions")
+        .upsert({ user_id: currentUser.id, workout_id: w.id, session_date: date }, { onConflict: "workout_id,session_date" })
+        .select().single();
+      pendingSessions.delete(key);
+      if (error) { showMessage("app-message", error.message, true); return null; }
+      sessions.push(data);
+      return data;
+    })());
   }
-
-  let shown = 0;
-  for (const day of days) {
-    if (dayF && day.day_of_week !== dayF) continue;
-    if (typeF && day.workout_type !== typeF) continue;
-    let dayExercises = exercises.filter((x) => x.day_of_week === day.day_of_week);
-    if (muscleF) {
-      dayExercises = dayExercises.filter((x) => x.muscle_groups.includes(muscleF));
-      if (!dayExercises.length) continue;
-    }
-    list.append(dayCard(day, dayExercises));
-    shown++;
-  }
-  if (!shown) list.append(el("div", { className: "card empty", textContent: "Nothing matches these filters." }));
+  return pendingSessions.get(key);
 }
 
-function dayCard(day, dayExercises) {
-  const card = el("div", { className: "card day" });
+// Values to show for an exercise in a session: what was logged that day,
+// else what was done last time, else the plan.
+function currentValues(x, session, date) {
+  const pick = (r) => ({ sets: r.sets, reps: r.reps, weights: r.weights, weight_unit: r.weight_unit });
+  const logged = session && logs.find((l) => l.session_id === session.id && l.exercise_id === x.id);
+  if (logged) return { values: pick(logged), source: "logged" };
+  const sessionDate = new Map(sessions.map((s) => [s.id, s.session_date]));
+  const previous = logs
+    .filter((l) => l.exercise_id === x.id && sessionDate.get(l.session_id) < date)
+    .sort((a, b) => sessionDate.get(b.session_id).localeCompare(sessionDate.get(a.session_id)))[0];
+  if (previous) return { values: pick(previous), source: "last time" };
+  return { values: pick(x), source: "plan" };
+}
 
-  // Header: day name, type, today badge
-  const typeSelect = el("select", { className: "type-select", title: "Workout type" });
-  fillSelect(typeSelect, TYPES);
-  typeSelect.value = day.workout_type;
-  typeSelect.addEventListener("change", async () => {
-    const { error } = await db.from("workout").update({ workout_type: typeSelect.value }).eq("id", day.id);
-    if (error) return showMessage("app-message", error.message, true);
-    loadAll();
+// ---------- This week ----------
+
+function showsOn(w, date) {
+  if (findSession(w.id, date)) return true; // anything already tracked stays visible
+  if (w.archived_at && date >= localDateOf(w.archived_at)) return false;
+  if (w.recurring) return w.days.includes(dayName(date)) && date >= startOfWeek(localDateOf(w.created_at));
+  return w.dates.includes(date);
+}
+
+function whenText(w) {
+  if (w.recurring) {
+    const days = DAYS.filter((d) => w.days.includes(d)).map((d) => d.slice(0, 3));
+    return `Every ${days.join(", ")}`;
+  }
+  return "One-off";
+}
+
+const typeFilterBar = $("type-filter");
+for (const t of ["", ...TYPES]) {
+  const b = el("button", { type: "button", textContent: t || "All", className: t ? "" : "on" });
+  b.addEventListener("click", () => {
+    typeFilter = t;
+    typeFilterBar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    renderWeek();
   });
-  const title = el("h3", {}, day.day_of_week);
-  if (day.day_of_week === todayName()) title.append(el("span", { className: "badge", textContent: "Today" }));
-  card.append(el("div", { className: "day-head" }, title, typeSelect));
+  typeFilterBar.append(b);
+}
+fillSelect($("filter-muscle"), MUSCLES, "All muscles");
+$("filter-muscle").addEventListener("change", renderWeek);
 
-  // Exercises
-  if (!dayExercises.length) card.append(el("p", { className: "muted", textContent: "No exercises yet." }));
-  for (const x of dayExercises) card.append(exerciseRow(x));
+$("prev-week").addEventListener("click", () => { weekStart = addDays(weekStart, -7); renderWeek(); });
+$("next-week").addEventListener("click", () => { weekStart = addDays(weekStart, 7); renderWeek(); });
+$("this-week").addEventListener("click", () => { weekStart = startOfWeek(today()); renderWeek(); });
 
-  // Mark done
-  const dateInput = el("input", { type: "date", value: today(), max: today() });
-  const doneBtn = el("button", { textContent: "Mark done" });
-  doneBtn.addEventListener("click", async () => {
-    const { error } = await db.from("workout_completions").insert({
-      completed_on: dateInput.value,
-      day_of_week: day.day_of_week,
-      workout_type: day.workout_type,
-    });
+function renderWeek() {
+  const end = addDays(weekStart, 6);
+  $("week-label").textContent = `${shortDate(weekStart)} – ${shortDate(end)}`;
+  $("this-week").hidden = weekStart === startOfWeek(today());
+
+  const muscle = $("filter-muscle").value;
+  const list = $("week-list");
+  list.innerHTML = "";
+  let shown = 0;
+
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(weekStart, i);
+    const items = workouts
+      .filter((w) => showsOn(w, date))
+      .filter((w) => !typeFilter || w.workout_type === typeFilter)
+      .filter((w) => !muscle || exercisesOf(w.id).some((x) => x.muscle_groups.includes(muscle)));
+    if (!items.length) continue;
+
+    const title = el("h3", { className: "day-title" },
+      dayName(date), el("span", { className: "muted", textContent: shortDate(date) }),
+      date === today() && el("span", { className: "badge", textContent: "Today" }));
+    const group = el("section", { className: "day-group" }, title);
+    for (const w of items) group.append(sessionCard(w, date));
+    list.append(group);
+    shown += items.length;
+  }
+
+  if (!shown) {
+    const filtered = typeFilter || muscle;
+    const create = el("button", { textContent: "Create a workout" });
+    create.addEventListener("click", () => showTab("new"));
+    list.append(el("div", { className: "card empty" },
+      el("p", { textContent: filtered ? "No workouts match these filters this week." : "No workouts this week." }),
+      !filtered && create));
+  }
+}
+
+function sessionCard(w, date) {
+  const session = findSession(w.id, date);
+  const card = el("article", { className: "card session" + (session?.completed ? " done" : "") });
+
+  const done = el("input", { type: "checkbox", checked: Boolean(session?.completed) });
+  done.addEventListener("change", async () => {
+    const s = await ensureSession(w, date);
+    if (!s) return (done.checked = !done.checked);
+    const { error } = await db.from("sessions").update({ completed: done.checked }).eq("id", s.id);
     if (error) {
-      const msg = error.code === "23505" ? `${day.day_of_week} is already marked done on ${prettyDate(dateInput.value)}.` : error.message;
-      return showMessage("app-message", msg, true);
+      done.checked = !done.checked;
+      return showMessage("app-message", error.message, true);
     }
-    showMessage("app-message", `${day.day_of_week} – ${day.workout_type} marked done on ${prettyDate(dateInput.value)}.`);
-    loadAll();
+    s.completed = done.checked;
+    card.classList.toggle("done", done.checked);
+    renderProgress();
   });
 
-  const weekDone = completions.filter((c) => c.day_of_week === day.day_of_week && c.completed_on >= startOfWeek());
-  const doneNote = el("span", { className: "muted small" },
-    weekDone.length ? `Done this week: ${weekDone.map((c) => prettyDate(c.completed_on)).join(", ")}` : "Not done this week");
+  card.append(el("div", { className: "session-head" },
+    el("div", {},
+      el("span", { className: "type-badge", textContent: w.workout_type }),
+      el("span", { className: "muted small when", textContent: whenText(w) })),
+    el("label", { className: "complete" }, done, el("span", { textContent: "Completed" }))));
 
-  const removeDay = el("button", { className: "link danger small", textContent: "Remove day" });
-  removeDay.addEventListener("click", async () => {
-    if (!confirm(`Remove ${day.day_of_week} and all its exercises from your plan?`)) return;
-    const { error } = await db.from("workout").delete().eq("id", day.id);
+  const list = exercisesOf(w.id);
+  if (!list.length) card.append(el("p", { className: "muted", textContent: "No exercises in this workout." }));
+  for (const x of list) card.append(trackRow(w, date, x));
+
+  const remove = el("button", { className: "link danger small", textContent: "Remove workout" });
+  remove.addEventListener("click", async () => {
+    if (!confirm("Remove this workout from your schedule? Workouts you already tracked stay in your history.")) return;
+    const { error } = await db.from("workout").update({ archived_at: new Date().toISOString() }).eq("id", w.id);
     if (error) return showMessage("app-message", error.message, true);
     loadAll();
   });
-
-  card.append(el("div", { className: "day-foot" }, el("div", { className: "done-row" }, dateInput, doneBtn), doneNote, removeDay));
+  card.append(el("div", { className: "session-foot" }, remove));
   return card;
 }
 
-// ---------- Exercise fields: read what was typed, show what's stored ----------
-// Each parser returns the value to save (null = empty) or throws a message to show.
+// One exercise inside a session: edit what you actually did, saved for that date.
+function trackRow(w, date, x) {
+  const { values, source } = currentValues(x, findSession(w.id, date), date);
+  const hint = el("span", { className: "muted small" });
+  const setHint = (src) => (hint.textContent = src === "logged" ? "✓ Saved" : src === "last time" ? "From last time" : "");
+  setHint(source);
 
-const FIELDS = {
-  sets: {
-    parse(s) {
-      s = s.trim();
-      if (!s) return null;
-      if (!/^\d+$/.test(s) || Number(s) < 1) throw "Sets must be a whole number like 3.";
-      return Number(s);
-    },
-    format: (v) => (v == null ? "" : String(v)),
-  },
-  reps: {
-    parse(s) {
-      s = s.trim();
-      if (!s) return null;
-      if (s.length > 20) throw "Reps must be 20 characters or less.";
-      return /^amrap$/i.test(s) ? "AMRAP" : /^max$/i.test(s) ? "Max" : s;
-    },
-    format: (v) => v ?? "",
-  },
-  weights: {
-    parse(s) {
-      const parts = s.split(/[,\s]+/).filter(Boolean);
-      if (!parts.length) return null;
-      const nums = parts.map(Number);
-      if (nums.some((n) => !Number.isFinite(n) || n < 0)) throw "Weights must be numbers, e.g. 60, 65, 70.";
-      return nums;
-    },
-    format: (v) => (v?.length ? v.map(Number).join(", ") : ""),
-  },
-};
-
-// 15 sec, 30 sec, 45 sec, 1 min, 1 min 15 sec ... up to 10 min.
-const REST_OPTIONS = Array.from({ length: 40 }, (_, i) => (i + 1) * 15);
-function formatRest(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (!m) return `${s} sec`;
-  return s ? `${m} min ${s} sec` : `${m} min`;
-}
-function fillRestSelect(select, value) {
-  select.innerHTML = "";
-  select.append(el("option", { value: "", textContent: "No rest set" }));
-  for (const s of REST_OPTIONS) select.append(el("option", { value: s, textContent: formatRest(s) }));
-  select.value = value ?? "";
-}
-
-function flashSaved(node) {
-  node.classList.add("saved");
-  setTimeout(() => node.classList.remove("saved"), 800);
-}
-
-async function saveExercise(x, field, value) {
-  const { error } = await db.from("exercises").update({ [field]: value }).eq("id", x.id);
-  if (error) { showMessage("app-message", error.message, true); return false; }
-  x[field] = value;
-  return true;
-}
-
-// A small text box that saves to the exercise as soon as it's changed.
-function editableField(x, field, label, opts) {
-  const { parse, format } = FIELDS[field];
-  const input = el("input", { type: "text", value: format(x[field]), ...opts });
-  input.addEventListener("change", async () => {
-    let value;
-    try { value = parse(input.value); } catch (msg) {
-      input.value = format(x[field]);
-      return showMessage("app-message", msg, true);
-    }
-    if (!(await saveExercise(x, field, value))) return (input.value = format(x[field]));
-    input.value = format(value);
+  async function save(field, value) {
+    const s = await ensureSession(w, date);
+    if (!s) return false;
+    const row = { user_id: currentUser.id, session_id: s.id, exercise_id: x.id, ...values, [field]: value };
+    const { data, error } = await db.from("session_exercises")
+      .upsert(row, { onConflict: "session_id,exercise_id" }).select().single();
+    if (error) { showMessage("app-message", error.message, true); return false; }
+    values[field] = value;
+    logs = logs.filter((l) => l.id !== data.id).concat(data);
     showMessage("app-message", "");
-    flashSaved(input);
-  });
-  return el("label", { className: "num" }, el("span", { textContent: label }), input);
+    setHint("logged");
+    return true;
+  }
+
+  function field(name, label, opts) {
+    const { parse, format } = FIELDS[name];
+    const input = el("input", { type: "text", value: format(values[name]), placeholder: "–", ...opts });
+    input.addEventListener("change", async () => {
+      let value;
+      try { value = parse(input.value); } catch (msg) {
+        input.value = format(values[name]);
+        return showMessage("app-message", msg, true);
+      }
+      if (!(await save(name, value))) return (input.value = format(values[name]));
+      input.value = format(value);
+      flashSaved(input);
+    });
+    return el("label", { className: "num" }, el("span", { textContent: label }), input);
+  }
+
+  const tags = x.muscle_groups.length
+    ? el("div", { className: "tags" }, ...x.muscle_groups.map((m) => el("span", { className: "tag", textContent: m })))
+    : null;
+  const plan = planSummary(x);
+
+  return el("div", { className: "track" },
+    el("div", { className: "track-head" },
+      el("div", {}, el("div", { className: "ex-name", textContent: x.exercise }), tags),
+      hint),
+    plan && el("div", { className: "muted small plan", textContent: `Plan: ${plan}` }),
+    el("div", { className: "nums" },
+      field("sets", "Sets", { inputMode: "numeric" }),
+      field("reps", "Reps"),
+      el("div", { className: "num-weight" },
+        field("weights", "Weight per set", { inputMode: "decimal" }),
+        unitToggle(values.weight_unit, async (u) => {
+          if (!(await save("weight_unit", u))) return false;
+          rememberUnit(u);
+        }))));
 }
 
-function exerciseRow(x) {
-  const tags = el("div", { className: "tags" }, ...x.muscle_groups.map((m) => el("span", { className: "tag", textContent: m })));
+// ---------- New workout builder ----------
 
+const builder = { type: null, days: new Set(), dates: [] };
+
+function renderTypeOptions() {
+  const wrap = $("type-options");
+  wrap.innerHTML = "";
+  for (const t of TYPES) {
+    const b = el("button", { type: "button", className: "type-option" + (builder.type === t ? " on" : ""), textContent: t });
+    b.addEventListener("click", () => {
+      builder.type = t;
+      renderTypeOptions();
+      updateSteps();
+    });
+    wrap.append(b);
+  }
+}
+
+function renderDayOptions() {
+  const wrap = $("day-options");
+  wrap.innerHTML = "";
+  for (const d of DAYS) {
+    const b = el("button", { type: "button", className: "chip" + (builder.days.has(d) ? " on" : ""), textContent: d });
+    b.addEventListener("click", () => {
+      builder.days.has(d) ? builder.days.delete(d) : builder.days.add(d);
+      renderDayOptions();
+      updateSteps();
+    });
+    wrap.append(b);
+  }
+}
+
+function renderDateList() {
+  const wrap = $("date-list");
+  wrap.innerHTML = "";
+  for (const d of [...builder.dates].sort()) {
+    const remove = el("button", { type: "button", className: "chip-x", textContent: "✕", title: "Remove date" });
+    remove.addEventListener("click", () => {
+      builder.dates = builder.dates.filter((x) => x !== d);
+      renderDateList();
+      updateSteps();
+    });
+    wrap.append(el("span", { className: "chip on" }, longDate(d), remove));
+  }
+}
+
+$("recurring").addEventListener("change", () => {
+  $("day-options").hidden = !$("recurring").checked;
+  $("date-picker").hidden = $("recurring").checked;
+  updateSteps();
+});
+
+function addDate() {
+  const d = $("date-input").value;
+  if (!d) return;
+  if (!builder.dates.includes(d)) builder.dates.push(d);
+  $("date-input").value = "";
+  renderDateList();
+  updateSteps();
+}
+$("add-date").addEventListener("click", addDate);
+$("date-input").addEventListener("change", addDate);
+
+function hasWhen() {
+  return $("recurring").checked ? builder.days.size > 0 : builder.dates.length > 0;
+}
+
+// Reveal each step once the one before it is filled in.
+function updateSteps() {
+  $("step-when").hidden = !builder.type;
+  const ready = Boolean(builder.type) && hasWhen();
+  $("step-exercises").hidden = !ready;
+  $("lets-train").hidden = !ready;
+  if (ready && !$("exercise-cards").children.length) addExerciseCard();
+}
+
+function addExerciseCard() {
+  const cards = $("exercise-cards");
+  const name = el("input", { type: "text", placeholder: "Exercise name, e.g. Bench Press", className: "ex-name-input" });
+  const sets = el("input", { type: "text", inputMode: "numeric", placeholder: "e.g. 3" });
+  const reps = el("input", { type: "text", placeholder: "e.g. 10, AMRAP" });
+  const weights = el("input", { type: "text", inputMode: "decimal", placeholder: "e.g. 60, 65, 70" });
   const rest = el("select");
-  fillRestSelect(rest, x.rest_seconds);
-  rest.addEventListener("change", async () => {
-    const value = rest.value === "" ? null : Number(rest.value);
-    if (await saveExercise(x, "rest_seconds", value)) flashSaved(rest);
-    else rest.value = x.rest_seconds ?? "";
+  fillRestSelect(rest);
+  const unit = unitToggle(savedUnit(), (u) => rememberUnit(u));
+  const muscles = el("div", { className: "chips small-chips" }, ...MUSCLES.map((m) => {
+    const b = el("button", { type: "button", className: "chip", textContent: m });
+    b.addEventListener("click", () => b.classList.toggle("on"));
+    return b;
+  }));
+
+  const remove = el("button", { type: "button", className: "icon-btn danger", textContent: "✕", title: "Remove exercise" });
+  const card = el("div", { className: "ex-card" },
+    el("div", { className: "ex-card-head" }, el("span", { className: "ex-num" }), name, remove),
+    el("div", { className: "ex-grid" },
+      el("label", {}, "Sets", sets),
+      el("label", {}, "Reps", reps),
+      el("div", { className: "field ex-weight" },
+        el("span", { className: "field-label", textContent: "Weight per set" }),
+        el("div", { className: "weight-row" }, weights, unit)),
+      el("label", {}, "Rest", rest)),
+    el("details", { className: "muscles" }, el("summary", { textContent: "Muscle groups (optional)" }), muscles));
+
+  remove.addEventListener("click", () => {
+    card.remove();
+    numberExerciseCards();
   });
 
-  const detail = el("div", { className: "nums" },
-    editableField(x, "sets", "Sets", { inputMode: "numeric", placeholder: "–" }),
-    editableField(x, "reps", "Reps", { placeholder: "–" }),
-    el("div", { className: "num-weight" },
-      editableField(x, "weights", "Weight per set", { inputMode: "decimal", placeholder: "–" }),
-      unitToggle(x.weight_unit, async (u) => {
-        if (!(await saveExercise(x, "weight_unit", u))) return false;
-        rememberUnit(u);
-      })),
-    el("label", { className: "num" }, el("span", { textContent: "Rest" }), rest));
-  const del = el("button", { className: "delete", textContent: "✕", title: "Delete exercise" });
-  del.addEventListener("click", async () => {
-    if (!confirm(`Delete ${x.exercise}?`)) return;
-    const { error } = await db.from("exercises").delete().eq("id", x.id);
-    if (error) return showMessage("app-message", error.message, true);
-    loadAll();
-  });
-  return el("div", { className: "entry" },
-    el("div", { className: "name" }, el("div", { className: "ex-name", textContent: x.exercise }), tags),
-    detail,
-    del);
+  // Read this card's values, or throw a message.
+  card.read = () => {
+    const exercise = name.value.trim();
+    const blank = !exercise && !sets.value.trim() && !reps.value.trim() && !weights.value.trim() && !rest.value;
+    if (blank) return null;
+    if (!exercise) throw "Each exercise needs a name.";
+    return {
+      exercise,
+      sets: FIELDS.sets.parse(sets.value),
+      reps: FIELDS.reps.parse(reps.value),
+      weights: FIELDS.weights.parse(weights.value),
+      weight_unit: unit.value,
+      rest_seconds: rest.value === "" ? null : Number(rest.value),
+      muscle_groups: [...muscles.querySelectorAll(".chip.on")].map((b) => b.textContent),
+    };
+  };
+
+  cards.append(card);
+  numberExerciseCards();
+  return card;
 }
+
+function numberExerciseCards() {
+  const cards = [...$("exercise-cards").children];
+  cards.forEach((c, i) => {
+    c.querySelector(".ex-num").textContent = i + 1;
+    c.querySelector(".icon-btn.danger").hidden = cards.length === 1;
+  });
+}
+
+$("add-exercise").addEventListener("click", () => addExerciseCard().querySelector(".ex-name-input").focus());
+
+function resetBuilder() {
+  builder.type = null;
+  builder.days.clear();
+  builder.dates = [];
+  $("recurring").checked = true;
+  $("day-options").hidden = false;
+  $("date-picker").hidden = true;
+  $("exercise-cards").innerHTML = "";
+  renderTypeOptions();
+  renderDayOptions();
+  renderDateList();
+  updateSteps();
+}
+
+$("lets-train").addEventListener("click", async () => {
+  const recurring = $("recurring").checked;
+  let list;
+  try {
+    list = [...$("exercise-cards").children].map((c) => c.read()).filter(Boolean);
+  } catch (msg) {
+    return showMessage("app-message", msg, true);
+  }
+  if (!list.length) return showMessage("app-message", "Add at least one exercise.", true);
+
+  const button = $("lets-train");
+  button.disabled = true;
+  const { data: w, error } = await db.from("workout").insert({
+    workout_type: builder.type,
+    recurring,
+    days: recurring ? DAYS.filter((d) => builder.days.has(d)) : [],
+    dates: recurring ? [] : [...builder.dates].sort(),
+  }).select().single();
+  if (error) {
+    button.disabled = false;
+    return showMessage("app-message", error.message, true);
+  }
+
+  const { error: exError } = await db.from("exercises").insert(list.map((x, i) => ({ ...x, workout_id: w.id, position: i })));
+  button.disabled = false;
+  if (exError) {
+    await db.from("workout").delete().eq("id", w.id);
+    return showMessage("app-message", exError.message, true);
+  }
+
+  // Jump to the week of the first session.
+  const first = recurring
+    ? Array.from({ length: 7 }, (_, i) => addDays(today(), i)).find((d) => builder.days.has(dayName(d)))
+    : [...builder.dates].sort()[0];
+  resetBuilder();
+  weekStart = startOfWeek(first ?? today());
+  showTab("week");
+  showMessage("app-message", `Workout saved. Lets train! 💪`);
+  await loadAll();
+});
+
+renderTypeOptions();
+renderDayOptions();
 
 // ---------- Progress ----------
 
 function renderProgress() {
-  const week = startOfWeek();
-  const month = startOfMonth();
-  const now = today();
-  $("stat-week").textContent = completions.filter((c) => c.completed_on >= week && c.completed_on <= now).length;
-  $("stat-month").textContent = completions.filter((c) => c.completed_on >= month && c.completed_on <= now).length;
+  const done = sessions.filter((s) => s.completed);
+  const week = startOfWeek(today());
+  const month = today().slice(0, 7);
+  $("stat-week").textContent = done.filter((s) => s.session_date >= week && s.session_date <= addDays(week, 6)).length;
+  $("stat-month").textContent = done.filter((s) => s.session_date.startsWith(month)).length;
 
   const list = $("history-list");
   list.innerHTML = "";
-  if (!completions.length) {
-    list.append(el("p", { className: "muted", textContent: "No completed workouts yet. Mark one done from your schedule." }));
+  if (!done.length) {
+    list.append(el("p", { className: "muted", textContent: "No completed workouts yet. Tick \"Completed\" on a workout in This week." }));
     return;
   }
-  for (const c of completions) {
-    const undo = el("button", { className: "delete", textContent: "Undo" });
-    undo.addEventListener("click", async () => {
-      const { error } = await db.from("workout_completions").delete().eq("id", c.id);
-      if (error) return showMessage("app-message", error.message, true);
-      loadAll();
+  for (const s of [...done].sort((a, b) => b.session_date.localeCompare(a.session_date))) {
+    const w = workouts.find((x) => x.id === s.workout_id);
+    const count = exercisesOf(s.workout_id).length;
+    const open = el("button", { className: "link small", textContent: "View" });
+    open.addEventListener("click", () => {
+      weekStart = startOfWeek(s.session_date);
+      showTab("week");
+      renderWeek();
     });
-    list.append(el("div", { className: "entry" },
-      el("div", { className: "name", textContent: prettyDate(c.completed_on) }),
-      el("div", { className: "detail", textContent: `${c.day_of_week} – ${c.workout_type}` }),
-      undo));
+    list.append(el("div", { className: "history-row" },
+      el("div", {}, el("div", { className: "ex-name", textContent: longDate(s.session_date) }),
+        el("div", { className: "muted small", textContent: `${w?.workout_type ?? "Workout"} · ${count} exercise${count === 1 ? "" : "s"}` })),
+      open));
   }
 }
-
-// ---------- Add exercise ----------
-
-fillSelect($("ex-day"), DAYS);
-fillSelect($("ex-type"), TYPES);
-$("ex-day").value = todayName();
-const exUnit = unitToggle(savedUnit(), (u) => rememberUnit(u));
-$("ex-unit").replaceWith(exUnit);
-fillRestSelect($("ex-rest"));
-for (const m of MUSCLES) {
-  $("ex-muscles").append(el("label", { className: "chip" }, el("input", { type: "checkbox", value: m }), m));
-}
-
-// When picking a day that's already planned, show its current type.
-function syncTypeToDay() {
-  const existing = days.find((d) => d.day_of_week === $("ex-day").value);
-  if (existing) $("ex-type").value = existing.workout_type;
-}
-$("ex-day").addEventListener("change", syncTypeToDay);
-document.querySelector('[data-tab="add"]').addEventListener("click", syncTypeToDay);
-
-$("exercise-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const day = $("ex-day").value;
-  const muscles = [...$("ex-muscles").querySelectorAll("input:checked")].map((i) => i.value);
-
-  let sets, reps, weights;
-  try {
-    sets = FIELDS.sets.parse($("ex-sets").value);
-    reps = FIELDS.reps.parse($("ex-reps").value);
-    weights = FIELDS.weights.parse($("ex-weights").value);
-  } catch (msg) {
-    return showMessage("app-message", msg, true);
-  }
-
-  const { error: dayError } = await db.from("workout").upsert(
-    { user_id: currentUser.id, day_of_week: day, workout_type: $("ex-type").value },
-    { onConflict: "user_id,day_of_week" }
-  );
-  if (dayError) return showMessage("app-message", dayError.message, true);
-
-  const { error } = await db.from("exercises").insert({
-    day_of_week: day,
-    exercise: $("ex-name").value.trim(),
-    muscle_groups: muscles,
-    sets,
-    reps,
-    weights,
-    weight_unit: exUnit.value,
-    rest_seconds: $("ex-rest").value === "" ? null : Number($("ex-rest").value),
-  });
-  if (error) return showMessage("app-message", error.message, true);
-
-  showMessage("app-message", `Added ${$("ex-name").value.trim()} to ${day}.`);
-  for (const id of ["ex-name", "ex-sets", "ex-reps", "ex-weights", "ex-rest"]) $(id).value = "";
-  $("ex-muscles").querySelectorAll("input").forEach((i) => (i.checked = false));
-  $("ex-name").focus();
-  loadAll();
-});

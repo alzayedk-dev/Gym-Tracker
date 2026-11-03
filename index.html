@@ -42,20 +42,59 @@
     <!-- Logged in -->
     <section id="app-view" hidden>
       <nav class="tabs">
-        <button data-tab="schedule" class="active">Schedule</button>
+        <button data-tab="week" class="active">This week</button>
+        <button data-tab="new">New workout</button>
         <button data-tab="progress">Progress</button>
-        <button data-tab="add">Add exercise</button>
       </nav>
       <p id="app-message" class="message"></p>
 
-      <!-- Schedule -->
-      <div id="tab-schedule">
-        <div class="card filters">
-          <label>Day <select id="filter-day"></select></label>
-          <label>Workout type <select id="filter-type"></select></label>
-          <label>Muscle <select id="filter-muscle"></select></label>
+      <!-- This week: sessions to track -->
+      <div id="tab-week">
+        <div class="week-nav">
+          <button id="prev-week" class="icon-btn" title="Previous week">‹</button>
+          <div class="week-label">
+            <strong id="week-label"></strong>
+            <button id="this-week" class="link small">Back to this week</button>
+          </div>
+          <button id="next-week" class="icon-btn" title="Next week">›</button>
         </div>
-        <div id="schedule-list"></div>
+        <div class="filter-bar">
+          <div id="type-filter" class="segmented"></div>
+          <select id="filter-muscle" aria-label="Muscle"></select>
+        </div>
+        <div id="week-list"></div>
+      </div>
+
+      <!-- New workout builder -->
+      <div id="tab-new" hidden>
+        <div class="card step">
+          <div class="step-head"><span class="step-num">1</span><h2>Workout type</h2></div>
+          <div id="type-options" class="type-options"></div>
+        </div>
+
+        <div class="card step" id="step-when" hidden>
+          <div class="step-head"><span class="step-num">2</span><h2>Days</h2></div>
+          <label class="toggle-row">
+            <input type="checkbox" id="recurring" checked>
+            <span><strong>Recurring session</strong><br><span class="muted small">Repeats every week on the days you pick. Untick to pick exact dates instead.</span></span>
+          </label>
+          <div id="day-options" class="chips"></div>
+          <div id="date-picker" hidden>
+            <div class="date-row">
+              <input type="date" id="date-input" aria-label="Date">
+              <button type="button" id="add-date" class="secondary">Add date</button>
+            </div>
+            <div id="date-list" class="chips"></div>
+          </div>
+        </div>
+
+        <div class="card step" id="step-exercises" hidden>
+          <div class="step-head"><span class="step-num">3</span><h2>Exercises</h2></div>
+          <div id="exercise-cards"></div>
+          <button type="button" id="add-exercise" class="secondary wide-btn">+ Add exercise</button>
+        </div>
+
+        <button id="lets-train" class="cta" hidden>Lets train 💪</button>
       </div>
 
       <!-- Progress -->
@@ -65,36 +104,8 @@
           <div class="card stat"><div class="stat-num" id="stat-month">0</div><div>workouts this month</div></div>
         </div>
         <div class="card">
-          <h2>History</h2>
+          <h2>Completed workouts</h2>
           <div id="history-list"></div>
-        </div>
-      </div>
-
-      <!-- Add exercise -->
-      <div id="tab-add" hidden>
-        <div class="card">
-          <h2>Add exercise to your plan</h2>
-          <form id="exercise-form" class="grid">
-            <label>Day <select id="ex-day" required></select></label>
-            <label>Workout type <select id="ex-type" required></select></label>
-            <label class="wide">Exercise <input type="text" id="ex-name" required placeholder="e.g. Bench Press"></label>
-            <fieldset class="full">
-              <legend>Muscle groups</legend>
-              <div id="ex-muscles" class="chips"></div>
-            </fieldset>
-            <label>Sets <input type="text" id="ex-sets" inputmode="numeric" placeholder="optional"></label>
-            <label>Reps <input type="text" id="ex-reps" placeholder="e.g. 10, AMRAP, max"></label>
-            <label>Rest <select id="ex-rest"></select></label>
-            <div class="field full">
-              <label for="ex-weights">Weight per set</label>
-              <div class="weight-row">
-                <input type="text" id="ex-weights" inputmode="decimal" placeholder="optional, e.g. 60, 65, 70">
-                <div id="ex-unit"></div>
-              </div>
-            </div>
-            <button type="submit" class="full">Add to plan</button>
-          </form>
-          <p class="hint">Only the exercise name is required. If the day already has a workout type, picking a different one changes it for that day.</p>
         </div>
       </div>
     </section>
