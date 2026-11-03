@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "mcp__0b33c4a2-55eb-4830-8c3c-9154ecdcc9b7__execute_sql",
-      "mcp__0b33c4a2-55eb-4830-8c3c-9154ecdcc9b7__apply_migration"
-    ]
-  }
-}
