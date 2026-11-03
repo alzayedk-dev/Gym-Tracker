@@ -1,34 +1,30 @@
-# Gym Tracker
+# Lets train 💪
 
-A website where people log in and record their workouts. Data is stored in Supabase.
+A gym tracker website. People log in (email/password or Google), build a weekly workout plan, edit sets/reps/weight as they train, and mark workouts done to see how many they did this week and month. Data is stored in Supabase.
 
 ## Running it
 
-It's a plain HTML/CSS/JS site, no build step. Open `index.html` in a browser, or serve the folder:
+Plain HTML/CSS/JS, no build step. Serve the folder with any static server, e.g.:
 
 ```bash
 npx serve .
 ```
 
-Sign up with an email and password. Supabase sends a confirmation email by default; confirm it, then log in.
+## Features
+
+- **Schedule**: the week's plan, filterable by day, workout type (Upper, Lower, Push, Pull, Legs, Full body, Cardio) or muscle group (Chest, Back, Arms, Shoulders, Legs, Core, Full body).
+- **Edit as you go**: sets, reps and weight are editable in place and save automatically.
+- **Mark done**: mark a day's workout completed on any date.
+- **Progress**: workouts this week / this month and full history.
 
 ## Database
 
-Table `public.workouts` — one row per exercise on a given date.
+| Table                 | What it holds                                                              |
+|-----------------------|----------------------------------------------------------------------------|
+| `workout_days`        | A user's weekly plan: one row per training day with its `workout_type`.   |
+| `exercises`           | Exercises for a day: `exercise`, `muscle_groups[]`, `sets`, `reps`, `weight`. |
+| `workout_completions` | One row each time a day's workout is marked done on `completed_on`.       |
 
-| Column        | Type                         | Notes                                   |
-|---------------|------------------------------|-----------------------------------------|
-| `id`          | bigint (identity)            | Primary key                             |
-| `user_id`     | uuid → `auth.users`          | Set automatically to the logged-in user |
-| `entry_date`  | date                         | Defaults to today                       |
-| `day_of_week` | enum `Monday` … `Sunday`     | Filled from `entry_date` by the site    |
-| `exercise`    | text                         | e.g. `Bench Press`                      |
-| `sets`        | smallint                     | Must be > 0                             |
-| `reps`        | smallint                     | Must be > 0                             |
-| `weight`      | numeric(6,2)                 | Optional, ≥ 0 (e.g. `62.5`)             |
-| `completed`   | boolean                      | Defaults to `false`                     |
-| `created_at`  | timestamptz                  | Defaults to `now()`                     |
-
-Row Level Security: each user can only read and change their own rows.
+Every table has a `user_id` and Row Level Security, so users only see and change their own rows.
 
 Schema lives in [`supabase/migrations`](supabase/migrations). The Supabase URL and publishable key are in `app.js`; the publishable key is safe to expose in a browser.

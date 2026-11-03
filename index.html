@@ -3,13 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gym Tracker</title>
+  <title>Lets train 💪</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💪</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
 <body>
   <header>
-    <h1>Gym Tracker</h1>
+    <h1 class="logo">Lets train <span class="logo-icon" aria-hidden="true">💪</span></h1>
     <div id="user-bar" hidden>
       <span id="user-email"></span>
       <button id="sign-out" class="link">Sign out</button>
@@ -20,6 +24,9 @@
     <!-- Login / sign up -->
     <section id="auth-view" class="card" hidden>
       <h2 id="auth-title">Log in</h2>
+      <p class="muted auth-sub">Plan your week, track every rep.</p>
+      <button id="google-sign-in" class="google">Continue with Google</button>
+      <div class="divider"><span>or</span></div>
       <form id="auth-form">
         <label>Email <input type="email" id="auth-email" required autocomplete="email"></label>
         <label>Password <input type="password" id="auth-password" required minlength="6" autocomplete="current-password"></label>
@@ -34,21 +41,55 @@
 
     <!-- Logged in -->
     <section id="app-view" hidden>
-      <div class="card">
-        <h2>Add exercise</h2>
-        <form id="workout-form" class="grid">
-          <label>Date <input type="date" id="entry-date" required></label>
-          <label class="wide">Exercise <input type="text" id="exercise" required placeholder="e.g. Bench Press"></label>
-          <label>Sets <input type="number" id="sets" required min="1" step="1"></label>
-          <label>Reps <input type="number" id="reps" required min="1" step="1"></label>
-          <label>Weight <input type="number" id="weight" min="0" step="0.5" placeholder="optional"></label>
-          <label class="check"><input type="checkbox" id="completed"> Completed</label>
-          <button type="submit" class="wide">Add</button>
-        </form>
-        <p id="form-message" class="message"></p>
+      <nav class="tabs">
+        <button data-tab="schedule" class="active">Schedule</button>
+        <button data-tab="progress">Progress</button>
+        <button data-tab="add">Add exercise</button>
+      </nav>
+      <p id="app-message" class="message"></p>
+
+      <!-- Schedule -->
+      <div id="tab-schedule">
+        <div class="card filters">
+          <label>Day <select id="filter-day"></select></label>
+          <label>Workout type <select id="filter-type"></select></label>
+          <label>Muscle <select id="filter-muscle"></select></label>
+        </div>
+        <div id="schedule-list"></div>
       </div>
 
-      <div id="workout-list"></div>
+      <!-- Progress -->
+      <div id="tab-progress" hidden>
+        <div class="stats">
+          <div class="card stat"><div class="stat-num" id="stat-week">0</div><div>workouts this week</div></div>
+          <div class="card stat"><div class="stat-num" id="stat-month">0</div><div>workouts this month</div></div>
+        </div>
+        <div class="card">
+          <h2>History</h2>
+          <div id="history-list"></div>
+        </div>
+      </div>
+
+      <!-- Add exercise -->
+      <div id="tab-add" hidden>
+        <div class="card">
+          <h2>Add exercise to your plan</h2>
+          <form id="exercise-form" class="grid">
+            <label>Day <select id="ex-day" required></select></label>
+            <label>Workout type <select id="ex-type" required></select></label>
+            <label class="wide">Exercise <input type="text" id="ex-name" required placeholder="e.g. Bench Press"></label>
+            <fieldset class="full">
+              <legend>Muscle groups</legend>
+              <div id="ex-muscles" class="chips"></div>
+            </fieldset>
+            <label>Sets <input type="number" id="ex-sets" required min="1" step="1"></label>
+            <label>Reps <input type="number" id="ex-reps" required min="1" step="1"></label>
+            <label>Weight <input type="number" id="ex-weight" min="0" step="0.5" placeholder="optional"></label>
+            <button type="submit" class="full">Add to plan</button>
+          </form>
+          <p class="hint">If the day already has a workout type, picking a different one changes it for that day.</p>
+        </div>
+      </div>
     </section>
   </main>
 
