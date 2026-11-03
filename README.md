@@ -13,6 +13,9 @@ Table `public.workouts` — one row per exercise on a training day. Days with no
 | `exercise`    | text                         | e.g. `Bench Press`     |
 | `sets`        | smallint                     | Must be > 0            |
 | `reps`        | smallint                     | Must be > 0            |
+| `weight`      | numeric(6,2)                 | Optional, ≥ 0 (e.g. `62.5`) |
+| `entry_date`  | date                         | Defaults to today      |
+| `completed`   | boolean                      | Defaults to `false`    |
 | `created_at`  | timestamptz                  | Defaults to `now()`    |
 
 Schema lives in [`supabase/migrations`](supabase/migrations).
