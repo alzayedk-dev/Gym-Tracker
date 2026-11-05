@@ -16,6 +16,7 @@ npx serve .
 - **This week**: every workout on every date, with a **Completed** box. Sets, reps and weights are editable and saved for that date, pre-filled from last time. Filter by type or muscle; step back and forward through weeks.
 - **Progress photos**: add pictures to any session (JPEG, PNG, WebP or GIF, up to 5 MB). They're stored in the public `progress-photos` bucket and shown on the session card and in a gallery.
 - **Progress**: completed workouts this week / this month, the photo gallery and the full list.
+- **Coach**: an AI coach chat for questions about exercises and how to change workout type, reps or exercises. It reads your plan and recent sessions and only gives advice. Runs in the `coach` Supabase Edge Function ([`supabase/functions/coach`](supabase/functions/coach)), which calls a free OpenRouter model using the `OPENROUTER_API_KEY` Supabase secret; logged-in users only, chats aren't saved.
 
 ## Database
 

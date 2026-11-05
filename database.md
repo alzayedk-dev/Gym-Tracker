@@ -187,6 +187,9 @@ Not from the website. There are no delete buttons and the bucket has no delete p
 **Who can see my progress photos?**
 The bucket is public: anyone who has a photo's link can open it. Links are long and random, so they're hard to guess, but if you share one, whoever gets it can see that picture.
 
+**Does the AI coach store anything?**
+No. The coach reads your plan and your last few sessions (only your own rows, the same privacy rules apply) to tailor its answers, but it doesn't write to any table and chats aren't saved.
+
 **Can other people see my workouts?**
 No. Every table has a `user_id`, and the database only lets you read or change rows with your own ID.
 

@@ -45,6 +45,7 @@
         <button data-tab="week" class="active">This week</button>
         <button data-tab="new">New workout</button>
         <button data-tab="progress">Progress</button>
+        <button data-tab="coach">Coach</button>
       </nav>
       <p id="app-message" class="message"></p>
 
@@ -110,6 +111,26 @@
         <div class="card">
           <h2>Completed workouts</h2>
           <div id="history-list"></div>
+        </div>
+      </div>
+
+      <!-- AI coach -->
+      <div id="tab-coach" hidden>
+        <div class="card coach">
+          <div class="coach-head">
+            <span class="coach-avatar" aria-hidden="true">🏋️</span>
+            <div>
+              <h2>Your coach</h2>
+              <p class="muted small">Ask about exercises, technique, or how to change your workout type, reps or exercises. It knows your plan and what you've logged.</p>
+            </div>
+          </div>
+          <div id="coach-log" class="coach-log" aria-live="polite"></div>
+          <div id="coach-suggestions" class="chips small-chips"></div>
+          <form id="coach-form" class="coach-form">
+            <textarea id="coach-input" rows="2" maxlength="2000" placeholder="Ask your coach…" aria-label="Your question"></textarea>
+            <button type="submit" id="coach-send">Send</button>
+          </form>
+          <p class="muted small coach-note">AI advice can be wrong. For pain or injuries, see a doctor or physio.</p>
         </div>
       </div>
     </section>

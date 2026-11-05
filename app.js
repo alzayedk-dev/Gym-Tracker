@@ -162,6 +162,83 @@ function planSummary(x) {
   return parts.join(" · ");
 }
 
+// ---------- AI coach ----------
+// The chat lives only in memory: it clears on refresh, sign-in or sign-out.
+
+const COACH_SUGGESTIONS = [
+  "How do I do a proper squat?",
+  "Should I switch from Full body to Upper / Lower?",
+  "How should I increase my reps or weight?",
+  "What can I swap in for an exercise I don't like?",
+];
+let coachMessages = [];
+
+// Show a reply as text, turning **bold** into bold without using HTML from the model.
+function coachBubble(role, text) {
+  const bubble = el("div", { className: `bubble ${role}` });
+  text.split(/(\*\*[^*]+\*\*)/).forEach((part) => {
+    bubble.append(/^\*\*[^*]+\*\*$/.test(part) ? el("strong", { textContent: part.slice(2, -2) }) : part);
+  });
+  return bubble;
+}
+
+function resetCoach() {
+  coachMessages = [];
+  $("coach-log").innerHTML = "";
+  $("coach-log").append(coachBubble("assistant",
+    "Hi! I'm your coach 💪 Ask me about any exercise, or how to change your workout type, reps or exercises."));
+  $("coach-suggestions").hidden = false;
+}
+
+async function askCoach(question) {
+  question = question.trim();
+  if (!question) return;
+  const log = $("coach-log");
+  $("coach-suggestions").hidden = true;
+  coachMessages.push({ role: "user", content: question });
+  log.append(coachBubble("user", question));
+  const typing = el("div", { className: "bubble assistant typing", textContent: "Coach is typing…" });
+  log.append(typing);
+  log.scrollTop = log.scrollHeight;
+  $("coach-send").disabled = true;
+
+  const { data, error } = await db.functions.invoke("coach", { body: { messages: coachMessages } });
+  typing.remove();
+  $("coach-send").disabled = false;
+
+  if (error || !data?.reply) {
+    let msg = "The coach couldn't answer right now. Please try again.";
+    try { msg = (await error.context.json()).error ?? msg; } catch {}
+    coachMessages.pop(); // let them ask again without a gap in the chat
+    log.append(el("div", { className: "bubble error", textContent: msg }));
+  } else {
+    coachMessages.push({ role: "assistant", content: data.reply });
+    log.append(coachBubble("assistant", data.reply));
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+for (const q of COACH_SUGGESTIONS) {
+  const b = el("button", { type: "button", className: "chip", textContent: q });
+  b.addEventListener("click", () => askCoach(q));
+  $("coach-suggestions").append(b);
+}
+
+$("coach-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("coach-input").value;
+  $("coach-input").value = "";
+  askCoach(q);
+});
+
+// Enter sends, Shift+Enter makes a new line.
+$("coach-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    $("coach-form").requestSubmit();
+  }
+});
+
 // ---------- Auth ----------
 
 let signUpMode = false;
@@ -215,6 +292,7 @@ db.auth.onAuthStateChange((_event, session) => {
   $("auth-view").hidden = Boolean(user);
   $("app-view").hidden = !user;
   $("user-bar").hidden = !user;
+  resetCoach();
   if (user) {
     $("user-email").textContent = user.email;
     loadAll();
@@ -225,7 +303,7 @@ db.auth.onAuthStateChange((_event, session) => {
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  for (const t of ["week", "new", "progress"]) $("tab-" + t).hidden = t !== name;
+  for (const t of ["week", "new", "progress", "coach"]) $("tab-" + t).hidden = t !== name;
   showMessage("app-message", "");
 }
 document.querySelectorAll(".tabs button").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
