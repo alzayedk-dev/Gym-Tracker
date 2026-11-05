@@ -429,12 +429,14 @@ button.cta {
 .history-note { margin-top: 4px; color: var(--text); opacity: 0.85; }
 
 .muscle-bars { display: flex; flex-direction: column; gap: 6px; }
-.muscle-bar { display: grid; grid-template-columns: 80px 1fr auto; align-items: center; gap: 10px; font-size: 0.85rem; }
+.muscle-bar { display: grid; grid-template-columns: 80px 1fr 132px; align-items: center; gap: 10px; font-size: 0.85rem; }
+.muscle-ex { grid-column: 2 / -1; margin-top: -4px; }
+.worked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .muscle-bar .bar { height: 8px; border-radius: 999px; background: var(--field); overflow: hidden; }
 .muscle-bar .bar i { display: block; height: 100%; border-radius: inherit; background: var(--done); }
 .muscle-bar.none .bar i, .muscle-bar.light .bar i { background: var(--accent); }
 .muscle-bar.lot .bar i { background: var(--danger); }
-.level { font-size: 0.75rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.level { font-size: 0.75rem; font-weight: 700; color: var(--muted); white-space: nowrap; text-align: right; }
 .muscle-bar.none .level, .muscle-bar.light .level { color: var(--accent); }
 .muscle-bar.lot .level { color: var(--danger); }
 .week-summary { border-color: var(--done); }

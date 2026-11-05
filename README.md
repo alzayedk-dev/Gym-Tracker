@@ -19,7 +19,7 @@ npx serve .
 - **Coach**: an AI coach chat for questions about exercises and how to change workout type, reps or exercises. It reads your plan and recent sessions and only gives advice. Runs in the `coach` Supabase Edge Function ([`supabase/functions/coach`](supabase/functions/coach)), which calls a free OpenRouter model using the `OPENROUTER_API_KEY` Supabase secret; logged-in users only, chats aren't saved.
 
 - **Workout summary**: ticking **Completed** calls the `summarize` edge function. It shows totals (sets, reps, weight lifted), what changed since last time and a short AI coach note under the workout, saved in `sessions.summary`.
-- **Week summary**: when every workout in a week is ticked (or on request for a finished week), the `week-summary` edge function shows sets per muscle (not trained / light / good / a lot) and AI tips on what needs work or was overworked, saved in `week_summaries`.
+- **Week summary**: when every workout in a week is ticked (or on request for a finished week), the `week-summary` edge function reads your exercise names to work out which muscles you trained ([`_shared/muscles.ts`](supabase/functions/_shared/muscles.ts): your picked muscles, then name matching, then the AI for unknown names) and shows sets per muscle (not trained / light / good / a lot) and AI tips on what needs work or was overworked, saved in `week_summaries`.
 - **AI safety**: the browser only calls Supabase edge functions, never OpenRouter. A rate guard (`ai_take_slot`) allows at most 5 AI requests a minute in total. If the AI fails or is limited, the numbers still show and you can write the note yourself.
 
 ## Database

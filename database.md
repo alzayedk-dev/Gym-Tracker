@@ -219,6 +219,9 @@ No. The coach reads your plan and your last few sessions (only your own rows, th
 **How do the workout and week summaries work?**
 Tick **Completed** and the `summarize` edge function adds up that workout and asks the AI for a short note. A thinking face 🤔 shows while it works. When the last workout of the week is ticked, the `week-summary` function does the same for the whole week and gives tips on muscles that need work or got a lot. The website only ever calls these Supabase functions; the OpenRouter key stays on Supabase and never reaches the browser.
 
+**How does it know which muscles I worked?**
+It reads the exercise names you typed. If you picked muscles on an exercise card, those are used. Otherwise the name is matched against common gym words: "bench press" → Chest, "pullup" → Back, "dips" → Chest + Arms, "back squat" → Legs, "leg raise" → Core, and so on. Any name it still doesn't recognise is sent to the AI to work out (this uses one of the 5-a-minute AI requests). If even that fails, the summary lists those exercises so you can pick their muscles yourself.
+
 **What if the AI fails or is busy?**
 The numbers still show and are saved. The note box stays empty for you to write your own, and you can always edit the note.
 

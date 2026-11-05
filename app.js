@@ -604,7 +604,14 @@ function summaryBox(s) {
     ...(stats.lines ?? []).map((x) => el("li", {},
       el("span", { className: "ex-name", textContent: x.exercise }),
       el("span", { className: "muted small", textContent: ` ${x.done} · ` }),
-      el("span", { className: "small change" + (/\+|→/.test(x.change) ? " up" : ""), textContent: x.change }))));
+      el("span", { className: "small change" + (/\+|→/.test(x.change) ? " up" : ""), textContent: x.change }),
+      x.muscles?.length ? el("span", { className: "muted small", textContent: ` · ${x.muscles.join(", ")}` }) : null)));
+  // Which muscles this workout hit, worked out from the exercise names.
+  const worked = stats.muscles?.length
+    ? el("div", { className: "worked" },
+      el("span", { className: "muted small", textContent: "Muscles worked:" }),
+      ...stats.muscles.map((m) => el("span", { className: "tag", textContent: `${m.muscle} · ${m.sets} sets` })))
+    : null;
 
   // The note: written by the AI, or by you if the AI couldn't (or you'd rather).
   const input = el("textarea", {
@@ -625,7 +632,7 @@ function summaryBox(s) {
 
   return el("div", { className: "summary" },
     el("div", { className: "summary-title", textContent: "Workout summary" }),
-    tiles, lines, el("label", { className: "summary-note" }, who, autoGrow(input)));
+    tiles, worked, lines, el("label", { className: "summary-note" }, who, autoGrow(input)));
 }
 
 // ---------- Week summary ----------
@@ -707,9 +714,12 @@ function weekSummaryCard(row) {
     ...stats.muscles.map((m) => el("div", { className: `muscle-bar ${m.level}` },
       el("span", { textContent: m.muscle }),
       el("span", { className: "bar" }, el("i", { style: `width:${Math.min(m.sets / 20, 1) * 100}%` })),
-      el("span", { className: "level", textContent: `${m.sets} sets · ${MUSCLE_LEVELS[m.level]}` }))));
+      el("span", { className: "level", textContent: `${m.sets} sets · ${MUSCLE_LEVELS[m.level]}` }),
+      m.exercises?.length ? el("span", { className: "muscle-ex muted small", textContent: m.exercises.join(", ") }) : null)));
   const unlabelled = stats.unlabelled_sets
-    ? el("p", { className: "muted small", textContent: `${stats.unlabelled_sets} sets had no muscle picked, so they're not in the bars.` })
+    ? el("p", { className: "muted small", textContent: stats.unrecognised?.length
+      ? `Couldn't tell which muscles these work: ${stats.unrecognised.join(", ")}. Pick muscles on the exercise to include them.`
+      : `${stats.unlabelled_sets} sets couldn't be matched to a muscle.` })
     : null;
 
   const input = el("textarea", {
@@ -732,7 +742,7 @@ function weekSummaryCard(row) {
     el("div", { className: "summary" },
       el("div", { className: "summary-title", textContent: `Week summary · ${shortDate(row.week_start)} – ${shortDate(addDays(row.week_start, 6))}` }),
       tiles,
-      el("div", { className: "muted small", textContent: "Sets per muscle (6–20 a week is a good range)" }),
+      el("div", { className: "muted small", textContent: "Sets per muscle, read from your exercise names (6–20 a week is a good range)" }),
       bars, unlabelled,
       el("label", { className: "summary-note" }, who, autoGrow(input))));
 }

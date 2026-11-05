@@ -3,9 +3,9 @@
 // muscles that were missed or worked a lot, asks a free OpenRouter model for tips, and saves it.
 // If the AI fails or the rate guard says no, the numbers are still saved and the user can write the note.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { MUSCLES, musclesFor } from "../_shared/muscles.ts";
 
 const MODELS = ["google/gemma-4-31b-it:free", "openrouter/free"];
-const MUSCLES = ["Chest", "Back", "Arms", "Shoulders", "Legs", "Core"];
 
 const SYSTEM = `You are the encouraging strength coach in "Lets train", a gym tracker.
 Write a short review of the user's training week (3-5 sentences, under 100 words):
@@ -71,8 +71,24 @@ Deno.serve(async (req) => {
     .sort((a, b) => a.session_date.localeCompare(b.session_date));
   if (!done.length) return json({ error: "No completed workouts this week yet." }, 400);
 
-  // Per muscle sets; an exercise marked "Full body" counts towards every muscle.
+  // AI use goes through the rate guard (5 AI requests a minute in total).
+  const key = Deno.env.get("OPENROUTER_API_KEY");
+  let limited = false;
+  const takeAi = async (fn: string) => {
+    if (!key || limited) return null;
+    const { data: ok } = await db.rpc("ai_take_slot", { fn });
+    limited = ok !== true;
+    return limited ? null : key;
+  };
+
+  // Read the exercise names to work out which muscles each one trains.
+  const weekExercises = exercises.filter((x) => done.some((se) => se.workout_id === x.workout_id));
+  const found = await musclesFor(weekExercises, () => takeAi("week-summary"));
+
+  // Per muscle sets, and which exercises they came from.
   const muscleSets: Record<string, number> = Object.fromEntries(MUSCLES.map((m) => [m, 0]));
+  const muscleExercises: Record<string, Set<string>> = Object.fromEntries(MUSCLES.map((m) => [m, new Set<string>()]));
+  const unrecognised = new Set<string>();
   const volume: Record<string, number> = {};
   const types: Record<string, number> = {};
   let sets = 0, reps = 0, unlabelled = 0;
@@ -101,17 +117,18 @@ Deno.serve(async (req) => {
           volume[n.weight_unit] = round((volume[n.weight_unit] ?? 0) + v);
         }
       }
-      const muscles: string[] = x.muscle_groups ?? [];
-      const hit = muscles.includes("Full body") ? MUSCLES : muscles.filter((m) => MUSCLES.includes(m));
-      if (!hit.length) unlabelled += nSets;
-      for (const m of hit) muscleSets[m] += nSets;
+      const hit = found.get(x.exercise)?.muscles ?? [];
+      if (!hit.length) { unlabelled += nSets; unrecognised.add(x.exercise); }
+      for (const m of hit) { muscleSets[m] += nSets; muscleExercises[m].add(x.exercise); }
       items.push(`${x.exercise} ${nSets}×${n.reps ?? "?"}${n.weights?.length ? ` @ ${n.weights.join(", ")} ${n.weight_unit}` : ""}` +
-        (hit.length ? ` [${muscles.join(", ")}]` : ""));
+        (hit.length ? ` [${hit.join(", ")}]` : ""));
     }
     lines.push(`${se.session_date} ${type}: ${items.join("; ") || "no exercises"}`);
   }
 
-  const muscles = MUSCLES.map((m) => ({ muscle: m, sets: muscleSets[m], level: level(muscleSets[m]) }));
+  const muscles = MUSCLES.map((m) => ({
+    muscle: m, sets: muscleSets[m], level: level(muscleSets[m]), exercises: [...muscleExercises[m]],
+  }));
   const stats = {
     week_start: weekStart,
     workouts: done.length,
@@ -121,22 +138,17 @@ Deno.serve(async (req) => {
     volume: Object.entries(volume).map(([unit, total]) => ({ unit, total })),
     muscles,
     unlabelled_sets: unlabelled,
+    unrecognised: [...unrecognised],
   };
 
-  // AI tips, behind the rate guard (5 AI requests a minute in total).
+  // AI tips, behind the rate guard.
   let note: string | null = null;
-  let limited = false;
-  const key = Deno.env.get("OPENROUTER_API_KEY");
-  if (key) {
-    const { data: ok } = await db.rpc("ai_take_slot", { fn: "week-summary" });
-    limited = ok !== true;
-  }
-  if (key && !limited) {
+  if (await takeAi("week-summary")) {
     const prompt = [
       `Week ${weekStart} to ${weekEnd}: ${done.length} workouts, ${sets} sets, ${reps} reps` +
         (stats.volume.length ? `, ${stats.volume.map((v) => `${v.total} ${v.unit}`).join(" + ")} lifted` : "") + ".",
       `Sets per muscle: ${muscles.map((m) => `${m.muscle} ${m.sets}`).join(", ")}` +
-        (unlabelled ? ` (plus ${unlabelled} sets with no muscle chosen)` : "") + ".",
+        (unlabelled ? ` (plus ${unlabelled} sets of exercises that couldn't be matched to a muscle)` : "") + ".",
       "Sessions:",
       ...lines.map((x) => `- ${x}`),
     ].join("\n");

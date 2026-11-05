@@ -3,6 +3,7 @@
 // asks a free OpenRouter model for a short coach note, and saves both on the session.
 // If the AI fails, the numbers are still saved and the note is left for the user to write.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { MUSCLES, musclesFor } from "../_shared/muscles.ts";
 
 const MODELS = ["google/gemma-4-31b-it:free", "openrouter/free"];
 
@@ -106,6 +107,21 @@ Deno.serve(async (req) => {
     return { exercise: x.exercise as string, now, before: before ? pick(before) : null };
   });
 
+  // AI use goes through the rate guard: at most 5 AI requests a minute in total.
+  // Over the limit, the AI parts are skipped and the numbers are kept.
+  const key = Deno.env.get("OPENROUTER_API_KEY");
+  let limited = false;
+  const takeAi = async () => {
+    if (!key || limited) return null;
+    const { data: ok } = await db.rpc("ai_take_slot", { fn: "summarize" });
+    limited = ok !== true;
+    return limited ? null : key;
+  };
+
+  // Read the exercise names to work out which muscles were trained.
+  const found = await musclesFor(exercises, takeAi);
+  const muscleSets: Record<string, number> = {};
+
   const volume: Record<string, number> = {};
   let sets = 0, reps = 0;
   const lines = rows.map(({ exercise, now, before }) => {
@@ -113,7 +129,9 @@ Deno.serve(async (req) => {
     sets += t.sets || 0;
     reps += t.reps || 0;
     if (t.volume) volume[now.weight_unit] = round((volume[now.weight_unit] ?? 0) + t.volume);
-    return { exercise, done: numbersText(now), change: changeText(now, before) };
+    const muscles = found.get(exercise)?.muscles ?? [];
+    for (const m of muscles) muscleSets[m] = (muscleSets[m] ?? 0) + (t.sets || 0);
+    return { exercise, done: numbersText(now), change: changeText(now, before), muscles };
   });
   const stats = {
     workout_type: w.data?.workout_type ?? "Workout",
@@ -121,24 +139,19 @@ Deno.serve(async (req) => {
     sets,
     reps,
     volume: Object.entries(volume).map(([unit, total]) => ({ unit, total })),
+    muscles: MUSCLES.filter((m) => muscleSets[m]).map((m) => ({ muscle: m, sets: muscleSets[m] })),
     lines,
   };
 
   // Ask the AI for a short note. Failing here is fine: the numbers are saved anyway.
-  // Rate guard: at most 5 AI requests a minute in total. Over the limit, skip the AI and keep the numbers.
   let note: string | null = null;
-  let limited = false;
-  const key = Deno.env.get("OPENROUTER_API_KEY");
-  if (key && rows.length) {
-    const { data: ok } = await db.rpc("ai_take_slot", { fn: "summarize" });
-    limited = ok !== true;
-  }
-  if (key && rows.length && !limited) {
+  if (rows.length && await takeAi()) {
     const prompt = [
       `${stats.workout_type} workout on ${session.session_date}.`,
       `Totals: ${sets} sets, ${reps} reps` +
         (stats.volume.length ? `, ${stats.volume.map((v) => `${v.total} ${v.unit}`).join(" + ")} lifted` : "") + ".",
-      ...lines.map((x) => `- ${x.exercise}: ${x.done} (${x.change})`),
+      `Muscles worked (sets): ${stats.muscles.map((m) => `${m.muscle} ${m.sets}`).join(", ") || "unknown"}.`,
+      ...lines.map((x) => `- ${x.exercise}${x.muscles.length ? ` [${x.muscles.join(", ")}]` : ""}: ${x.done} (${x.change})`),
     ].join("\n");
     try {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
