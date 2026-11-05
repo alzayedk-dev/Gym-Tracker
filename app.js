@@ -20,6 +20,7 @@ let currentUser = null;
 let workouts = [];  // workout rows (the plan)
 let exercises = []; // exercises planned in each workout
 let sessions = [];  // one workout on one date, with the completed tick
+let weekSummaries = []; // one saved summary per finished week
 let logs = [];      // session_exercises: what was actually done
 let weekStart = startOfWeek(today());
 let typeFilter = "";
@@ -311,18 +312,20 @@ document.querySelectorAll(".tabs button").forEach((btn) => btn.addEventListener(
 // ---------- Data ----------
 
 async function loadAll() {
-  const [w, e, s, l] = await Promise.all([
+  const [w, e, s, l, ws] = await Promise.all([
     db.from("workout").select("*").order("created_at"),
     db.from("exercises").select("*").order("position").order("created_at"),
     db.from("sessions").select("*"),
     db.from("session_exercises").select("*"),
+    db.from("week_summaries").select("*"),
   ]);
-  const error = w.error || e.error || s.error || l.error;
+  const error = w.error || e.error || s.error || l.error || ws.error;
   if (error) return showMessage("app-message", error.message, true);
   workouts = w.data;
   exercises = e.data;
   sessions = s.data;
   logs = l.data;
+  weekSummaries = ws.data;
   renderWeek();
   renderProgress();
 }
@@ -491,6 +494,10 @@ function renderWeek() {
     shown += items.length;
   }
 
+  weekSummaryWrap = el("div", { className: "week-summary-wrap" });
+  list.append(weekSummaryWrap);
+  renderWeekSummary();
+
   if (!shown) {
     const filtered = typeFilter || muscle;
     const create = el("button", { textContent: "Create a workout" });
@@ -517,7 +524,20 @@ function sessionCard(w, date) {
     s.completed = done.checked;
     card.classList.toggle("done", done.checked);
     renderProgress();
+    if (done.checked) {
+      makeSummary(s, summaryWrap);
+      // Last workout of the week ticked: sum up the whole week too.
+      const ws = startOfWeek(date);
+      const { planned, completed } = weekStatus(ws);
+      if (completed === planned) makeWeekSummary(ws);
+      else renderWeekSummary();
+    } else {
+      summaryWrap.replaceChildren();
+      renderWeekSummary();
+    }
   });
+  const summaryWrap = el("div", { className: "summary-wrap" });
+  if (session?.completed && session.summary) summaryWrap.append(summaryBox(session));
 
   card.append(el("div", { className: "session-head" },
     el("div", {},
@@ -529,6 +549,7 @@ function sessionCard(w, date) {
   if (!list.length) card.append(el("p", { className: "muted", textContent: "No exercises in this workout." }));
   for (const x of list) card.append(trackRow(w, date, x));
   card.append(photoStrip(w, date));
+  card.append(summaryWrap);
 
   const remove = el("button", { className: "link danger small", textContent: "Remove workout" });
   remove.addEventListener("click", async () => {
@@ -539,6 +560,181 @@ function sessionCard(w, date) {
   });
   card.append(el("div", { className: "session-foot" }, remove));
   return card;
+}
+
+// A note box that grows to fit its text.
+function autoGrow(textarea) {
+  const fit = () => { textarea.style.height = "auto"; textarea.style.height = textarea.scrollHeight + 4 + "px"; };
+  textarea.addEventListener("input", fit);
+  requestAnimationFrame(fit);
+  return textarea;
+}
+
+// ---------- Workout summary ----------
+// Ticking Completed asks the "summarize" edge function (never OpenRouter directly,
+// so the key stays on Supabase) to work out the numbers and write a coach note.
+
+async function makeSummary(s, wrap) {
+  wrap.replaceChildren(el("div", { className: "summary thinking" },
+    el("span", { className: "think-face", textContent: "🤔" }),
+    el("span", { textContent: "Summing up your workout…" })));
+  const { data, error } = await db.functions.invoke("summarize", { body: { session_id: s.id } });
+  if (!s.completed) return wrap.replaceChildren(); // unticked while waiting
+  if (error || !data?.summary) {
+    let msg = "Couldn't make a summary right now.";
+    try { msg = (await error.context.json()).error ?? msg; } catch {}
+    const retry = el("button", { type: "button", className: "link small", textContent: "Try again" });
+    retry.addEventListener("click", () => makeSummary(s, wrap));
+    return wrap.replaceChildren(el("div", { className: "summary failed" },
+      el("span", { className: "muted small", textContent: msg + " " }), retry));
+  }
+  s.summary = data.summary;
+  wrap.replaceChildren(summaryBox(s));
+  renderProgress();
+}
+
+function summaryBox(s) {
+  const { stats, note, note_by } = s.summary;
+  const volume = (stats.volume ?? []).map((v) => `${v.total.toLocaleString()} ${v.unit}`).join(" + ");
+  const tiles = el("div", { className: "summary-stats" },
+    ...[[stats.exercises, stats.exercises === 1 ? "exercise" : "exercises"], [stats.sets, "sets"], [stats.reps, "reps"],
+      volume && [volume, "lifted"]].filter(Boolean)
+      .map(([n, label]) => el("div", {}, el("strong", { textContent: n }), el("span", { textContent: label }))));
+  const lines = el("ul", { className: "summary-lines" },
+    ...(stats.lines ?? []).map((x) => el("li", {},
+      el("span", { className: "ex-name", textContent: x.exercise }),
+      el("span", { className: "muted small", textContent: ` ${x.done} · ` }),
+      el("span", { className: "small change" + (/\+|→/.test(x.change) ? " up" : ""), textContent: x.change }))));
+
+  // The note: written by the AI, or by you if the AI couldn't (or you'd rather).
+  const input = el("textarea", {
+    rows: 2, maxLength: 500, value: note ?? "",
+    placeholder: "The coach couldn't write a note this time. Write your own: how did it feel?",
+  });
+  const who = el("span", { className: "muted small", textContent: note_by === "ai" ? "🏋️ Coach's note" : "📝 Your note" });
+  input.addEventListener("change", async () => {
+    const text = input.value.trim();
+    const summary = { ...s.summary, note: text || null, note_by: text ? "you" : null };
+    const { error } = await db.from("sessions").update({ summary }).eq("id", s.id);
+    if (error) return showMessage("app-message", error.message, true);
+    s.summary = summary;
+    who.textContent = "📝 Your note";
+    flashSaved(input);
+    renderProgress();
+  });
+
+  return el("div", { className: "summary" },
+    el("div", { className: "summary-title", textContent: "Workout summary" }),
+    tiles, lines, el("label", { className: "summary-note" }, who, autoGrow(input)));
+}
+
+// ---------- Week summary ----------
+// Made by the "week-summary" edge function once every workout in the week is ticked,
+// or on request for a week that's over. Shows sets per muscle and the coach's tips.
+
+let weekSummaryWrap = null;
+const MUSCLE_LEVELS = { none: "Not trained", light: "Light", good: "Good", lot: "A lot" };
+
+// How many workouts were scheduled in a week, and how many are ticked Completed.
+function weekStatus(ws) {
+  let planned = 0, completed = 0;
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(ws, i);
+    for (const w of workouts.filter((w) => showsOn(w, date))) {
+      planned++;
+      if (findSession(w.id, date)?.completed) completed++;
+    }
+  }
+  return { planned, completed };
+}
+
+function renderWeekSummary() {
+  const wrap = weekSummaryWrap;
+  if (!wrap || wrap.dataset.busy) return;
+  wrap.replaceChildren();
+  const ws = weekStart;
+  const saved = weekSummaries.find((x) => x.week_start === ws);
+  const { planned, completed } = weekStatus(ws);
+  if (saved) return wrap.append(weekSummaryCard(saved));
+  if (!completed) return;
+  const over = addDays(ws, 6) < today();
+  if (!over && completed < planned) return;
+  const make = el("button", { type: "button", className: "secondary cta-small", textContent: "Summarize my week" });
+  make.addEventListener("click", () => makeWeekSummary(ws));
+  wrap.append(el("div", { className: "card week-summary" },
+    el("div", { className: "summary" },
+      el("div", { className: "summary-title", textContent: "Week summary" }),
+      el("p", { className: "muted small", textContent: `You completed ${completed} of ${planned} workouts this week.` }),
+      make)));
+}
+
+async function makeWeekSummary(ws) {
+  const wrap = weekSummaryWrap;
+  const showing = () => wrap && wrap.isConnected && weekStart === ws;
+  if (showing()) {
+    wrap.dataset.busy = "1";
+    wrap.replaceChildren(el("div", { className: "card week-summary" },
+      el("div", { className: "summary thinking" },
+        el("span", { className: "think-face", textContent: "🤔" }),
+        el("span", { textContent: "Looking back at your week…" }))));
+  }
+  const { data, error } = await db.functions.invoke("week-summary", { body: { week_start: ws } });
+  if (wrap) delete wrap.dataset.busy;
+  if (error || !data?.summary) {
+    let msg = "Couldn't sum up your week right now.";
+    try { msg = (await error.context.json()).error ?? msg; } catch {}
+    if (!showing()) return;
+    const retry = el("button", { type: "button", className: "link small", textContent: "Try again" });
+    retry.addEventListener("click", () => makeWeekSummary(ws));
+    return wrap.replaceChildren(el("div", { className: "card week-summary" },
+      el("div", { className: "summary failed" }, el("span", { className: "muted small", textContent: msg + " " }), retry)));
+  }
+  weekSummaries = weekSummaries.filter((x) => x.week_start !== ws)
+    .concat({ week_start: ws, summary: data.summary });
+  if (showing()) renderWeekSummary();
+}
+
+function weekSummaryCard(row) {
+  const { stats, note, note_by } = row.summary;
+  const volume = (stats.volume ?? []).map((v) => `${v.total.toLocaleString()} ${v.unit}`).join(" + ");
+  const tiles = el("div", { className: "summary-stats" },
+    ...[[stats.workouts, stats.workouts === 1 ? "workout" : "workouts"], [stats.sets, "sets"], [stats.reps, "reps"],
+      volume && [volume, "lifted"]].filter(Boolean)
+      .map(([n, label]) => el("div", {}, el("strong", { textContent: n }), el("span", { textContent: label }))));
+
+  // Sets per muscle; 6-20 a week is a good range, so the bar is full at 20.
+  const bars = el("div", { className: "muscle-bars" },
+    ...stats.muscles.map((m) => el("div", { className: `muscle-bar ${m.level}` },
+      el("span", { textContent: m.muscle }),
+      el("span", { className: "bar" }, el("i", { style: `width:${Math.min(m.sets / 20, 1) * 100}%` })),
+      el("span", { className: "level", textContent: `${m.sets} sets · ${MUSCLE_LEVELS[m.level]}` }))));
+  const unlabelled = stats.unlabelled_sets
+    ? el("p", { className: "muted small", textContent: `${stats.unlabelled_sets} sets had no muscle picked, so they're not in the bars.` })
+    : null;
+
+  const input = el("textarea", {
+    rows: 3, maxLength: 800, value: note ?? "",
+    placeholder: "The coach couldn't write tips this time. Write your own: what will you change next week?",
+  });
+  const who = el("span", { className: "muted small", textContent: note_by === "ai" ? "🏋️ Coach's tips" : "📝 Your note" });
+  input.addEventListener("change", async () => {
+    const text = input.value.trim();
+    const summary = { ...row.summary, note: text || null, note_by: text ? "you" : null };
+    const { error } = await db.from("week_summaries").update({ summary })
+      .eq("user_id", currentUser.id).eq("week_start", row.week_start);
+    if (error) return showMessage("app-message", error.message, true);
+    row.summary = summary;
+    who.textContent = "📝 Your note";
+    flashSaved(input);
+  });
+
+  return el("div", { className: "card week-summary" },
+    el("div", { className: "summary" },
+      el("div", { className: "summary-title", textContent: `Week summary · ${shortDate(row.week_start)} – ${shortDate(addDays(row.week_start, 6))}` }),
+      tiles,
+      el("div", { className: "muted small", textContent: "Sets per muscle (6–20 a week is a good range)" }),
+      bars, unlabelled,
+      el("label", { className: "summary-note" }, who, autoGrow(input))));
 }
 
 // One exercise inside a session: edit what you actually did, saved for that date.
@@ -837,7 +1033,8 @@ function renderProgress() {
     });
     list.append(el("div", { className: "history-row" },
       el("div", {}, el("div", { className: "ex-name", textContent: longDate(s.session_date) }),
-        el("div", { className: "muted small", textContent: `${w?.workout_type ?? "Workout"} · ${count} exercise${count === 1 ? "" : "s"}` })),
+        el("div", { className: "muted small", textContent: `${w?.workout_type ?? "Workout"} · ${count} exercise${count === 1 ? "" : "s"}` }),
+        s.summary?.note && el("div", { className: "small history-note", textContent: s.summary.note })),
       open));
   }
 }

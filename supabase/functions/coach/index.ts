@@ -110,6 +110,12 @@ Deno.serve(async (req) => {
     return json({ error: "Ask the coach a question." }, 400);
   }
 
+  // Rate guard: at most 5 AI requests a minute in total, so the free allowance can't be burned.
+  const { data: ok } = await db.rpc("ai_take_slot", { fn: "coach" });
+  if (ok !== true) {
+    return json({ error: "Easy there! The coach takes up to 5 questions a minute. Please wait a moment and ask again." }, 429);
+  }
+
   const context = await trainingSummary(db);
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {

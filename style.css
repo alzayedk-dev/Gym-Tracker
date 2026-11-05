@@ -394,6 +394,52 @@ button.cta {
 .coach-form textarea:focus { outline: none; border-color: var(--accent); background: var(--card); }
 .coach-note { margin: 0; text-align: center; }
 
+/* ---------- Workout + week summaries ---------- */
+
+.summary-wrap:empty { display: none; }
+.summary {
+  border-top: 1px solid var(--border); padding: 14px 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.week-summary .summary { border-top: none; padding: 0; }
+.summary-title { font-weight: 800; }
+.summary.thinking, .summary.failed { flex-direction: row; align-items: center; gap: 10px; color: var(--muted); }
+.think-face { font-size: 1.6rem; display: inline-block; animation: think 1.2s ease-in-out infinite; }
+@keyframes think { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg) translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .think-face { animation: none; } }
+.summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; }
+.summary-stats div {
+  background: var(--done-soft); border-radius: 12px; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.summary-stats strong { font-size: 1.15rem; color: var(--done); }
+.summary-stats span { font-size: 0.75rem; color: var(--muted); }
+.summary-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.summary-lines .ex-name { font-size: 0.9rem; }
+.change { color: var(--muted); font-weight: 600; }
+.change.up { color: var(--done); }
+.summary-note { margin: 0; gap: 4px; }
+.summary-note textarea {
+  overflow: hidden;
+  resize: vertical; font: inherit; font-size: 0.95rem; line-height: 1.5; color: var(--text);
+  background: var(--field); border: 1.5px solid transparent; border-radius: 12px; padding: 10px 12px;
+}
+.summary-note textarea:focus { outline: none; border-color: var(--accent); background: var(--card); }
+.summary-note textarea.saved { border-color: var(--done); }
+.history-note { margin-top: 4px; color: var(--text); opacity: 0.85; }
+
+.muscle-bars { display: flex; flex-direction: column; gap: 6px; }
+.muscle-bar { display: grid; grid-template-columns: 80px 1fr auto; align-items: center; gap: 10px; font-size: 0.85rem; }
+.muscle-bar .bar { height: 8px; border-radius: 999px; background: var(--field); overflow: hidden; }
+.muscle-bar .bar i { display: block; height: 100%; border-radius: inherit; background: var(--done); }
+.muscle-bar.none .bar i, .muscle-bar.light .bar i { background: var(--accent); }
+.muscle-bar.lot .bar i { background: var(--danger); }
+.level { font-size: 0.75rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.muscle-bar.none .level, .muscle-bar.light .level { color: var(--accent); }
+.muscle-bar.lot .level { color: var(--danger); }
+.week-summary { border-color: var(--done); }
+.week-summary .cta-small { align-self: flex-start; }
+
 /* ---------- Laptop ---------- */
 
 @media (min-width: 1024px) {

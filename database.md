@@ -1,6 +1,6 @@
 # Lets train 💪 — Database guide
 
-The website stores its data in Supabase, in four tables:
+The website stores its data in Supabase. The four main tables are below, plus `week_summaries` and `ai_requests`, which are explained further down:
 
 - **`workout`**: a workout you planned, with one type, on some weekdays (recurring) or on exact dates (one-off).
 - **`exercises`**: the exercises in each workout. A workout can have 1 exercise or 20.
@@ -59,6 +59,7 @@ Made the first time you tick **Completed** or type a number into a workout on th
 | `session_date` | Date                                   | Which date it was done on. |
 | `completed`    | True / false (starts as false)         | The **Completed** box. Completed sessions are what the week and month counts add up. |
 | `photo_urls`   | A list of links, empty when there are none | Progress photos for this session. Each **Add progress photo** upload adds its link here. Most sessions won't have any, and that's fine. |
+| `summary`      | JSON, can be empty                     | The **Workout summary** shown under a completed workout: totals (sets, reps, weight lifted), what changed since last time, and a short note from the AI coach (or your own). Made when you tick **Completed**. |
 | `created_at`   | Date and time, filled in automatically | When the session was first saved. |
 
 Rule: one session per workout per date, so nothing is counted twice.
@@ -80,6 +81,31 @@ One row per exercise per session, saved as soon as you change a number on the Th
 | `created_at`  | Date and time, filled in automatically | When it was first saved. |
 
 Rule: one entry per exercise per session.
+
+### `week_summaries`: how your week went
+
+One row per person per week, made when every workout in the week is ticked **Completed** (or when you press **Summarize my week** on a finished week).
+
+| Column       | Type                                   | Why it's there |
+|--------------|----------------------------------------|----------------|
+| `id`         | Whole number, given automatically      | A unique number for each summary. |
+| `user_id`    | User ID, filled in automatically       | Keeps it private. |
+| `week_start` | Date, always a Monday                  | Which week it's about. |
+| `summary`    | JSON                                   | Workouts done, total sets, reps and weight lifted, **sets per muscle** (Not trained / Light / Good / A lot), and the coach's tips on which muscles need work or got too much (or your own note). |
+| `created_at` | Date and time, filled in automatically | When it was first made. |
+
+Rule: one summary per person per week.
+
+### `ai_requests`: the AI rate guard
+
+A behind-the-scenes log of AI requests (coach questions and summaries). Before calling the AI, each edge function asks the database for a slot. **At most 5 AI requests a minute in total** are allowed, so nobody can use up the free OpenRouter allowance (about 50 a day). Nobody can read or change this table from the website; rows older than a day are cleaned up automatically.
+
+| Column       | Type                         | Why it's there |
+|--------------|------------------------------|----------------|
+| `id`         | Whole number                 | A unique number for each request. |
+| `user_id`    | User ID                      | Who asked. |
+| `fn`         | Text                         | Which function asked: `coach`, `summarize` or `week-summary`. |
+| `created_at` | Date and time                | When, so the last minute can be counted. |
 
 ### `progress-photos` — the photo storage bucket
 
@@ -189,6 +215,12 @@ The bucket is public: anyone who has a photo's link can open it. Links are long 
 
 **Does the AI coach store anything?**
 No. The coach reads your plan and your last few sessions (only your own rows, the same privacy rules apply) to tailor its answers, but it doesn't write to any table and chats aren't saved.
+
+**How do the workout and week summaries work?**
+Tick **Completed** and the `summarize` edge function adds up that workout and asks the AI for a short note. A thinking face 🤔 shows while it works. When the last workout of the week is ticked, the `week-summary` function does the same for the whole week and gives tips on muscles that need work or got a lot. The website only ever calls these Supabase functions; the OpenRouter key stays on Supabase and never reaches the browser.
+
+**What if the AI fails or is busy?**
+The numbers still show and are saved. The note box stays empty for you to write your own, and you can always edit the note.
 
 **Can other people see my workouts?**
 No. Every table has a `user_id`, and the database only lets you read or change rows with your own ID.
