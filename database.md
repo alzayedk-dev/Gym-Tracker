@@ -58,6 +58,7 @@ Made the first time you tick **Completed** or type a number into a workout on th
 | `workout_id`   | The `id` of a workout                  | Which workout was done. |
 | `session_date` | Date                                   | Which date it was done on. |
 | `completed`    | True / false (starts as false)         | The **Completed** box. Completed sessions are what the week and month counts add up. |
+| `photo_urls`   | A list of links, empty when there are none | Progress photos for this session. Each **Add progress photo** upload adds its link here. Most sessions won't have any, and that's fine. |
 | `created_at`   | Date and time, filled in automatically | When the session was first saved. |
 
 Rule: one session per workout per date, so nothing is counted twice.
@@ -79,6 +80,20 @@ One row per exercise per session, saved as soon as you change a number on the Th
 | `created_at`  | Date and time, filled in automatically | When it was first saved. |
 
 Rule: one entry per exercise per session.
+
+### `progress-photos` — the photo storage bucket
+
+Not a table: a public folder in Supabase Storage that holds the picture files. The links in `sessions.photo_urls` point here.
+
+| Setting        | Value                          | Why |
+|----------------|--------------------------------|-----|
+| Public         | Yes                            | Anyone with a photo's link can view it, so pictures load on the website without extra steps. |
+| File types     | JPEG, PNG, WebP, GIF only      | Images that every browser can show. Anything else is refused. |
+| Max size       | 5 MB per file                  | Keeps storage small and pages fast. |
+| Who can upload | Anyone                         | As requested for now. |
+| Who can delete | Nobody, from the website       | There's no delete permission, so photos can't be removed by accident or by others. |
+
+Files are saved as `<user id>/<random name>.<jpg|png|webp|gif>`, so each person's photos sit in their own folder.
 
 ## Example rows
 
@@ -159,6 +174,18 @@ Separate them with commas, e.g. `60, 65, 70`. One number is fine if every set is
 
 **Does kg ↔ lbs convert the numbers?**
 No. It only changes the label. It's for picking the right unit, not converting.
+
+**How do progress photos work?**
+On any workout in This week, press **Add progress photo** and pick a picture. It's uploaded to the `progress-photos` bucket, and its link is added to that session's `photo_urls`. You can add several per session. All photos also appear in the **Progress photos** gallery on the Progress page, newest first.
+
+**What happens if I pick a file that isn't an image, or is too big?**
+The website says: *"Sorry, only images (JPEG, PNG, WebP or GIF) up to 5 MB can be added."* The bucket also refuses it on its own, so the rule holds even if someone skips the website.
+
+**Can photos be deleted?**
+Not from the website. There are no delete buttons and the bucket has no delete permission.
+
+**Who can see my progress photos?**
+The bucket is public: anyone who has a photo's link can open it. Links are long and random, so they're hard to guess, but if you share one, whoever gets it can see that picture.
 
 **Can other people see my workouts?**
 No. Every table has a `user_id`, and the database only lets you read or change rows with your own ID.

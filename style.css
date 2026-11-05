@@ -269,6 +269,22 @@ label.complete {
 
 .session-foot { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 2px; text-align: right; }
 
+/* Progress photos */
+.photos { border-top: 1px solid var(--border); padding: 14px 0; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.photo-grid:not(:empty) { margin-bottom: 12px; }
+.photo-grid.gallery { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 0; }
+.photo { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: var(--muted); }
+.photo img {
+  width: 100%; aspect-ratio: 1; object-fit: cover; display: block;
+  border-radius: 12px; background: var(--field); border: 1px solid var(--border);
+}
+.photo:hover img { border-color: var(--accent); }
+.photo-caption { font-size: 0.75rem; font-weight: 600; }
+.gallery > p { grid-column: 1 / -1; margin: 0; }
+.photo-actions { display: flex; align-items: center; gap: 10px; }
+button.photo-btn { padding: 10px 14px; font-size: 0.9rem; }
+
 /* ---------- New workout builder ---------- */
 
 .step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }

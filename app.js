@@ -9,6 +9,11 @@ const TYPES = ["Full body", "Upper", "Lower"];
 const MUSCLES = ["Chest", "Back", "Arms", "Shoulders", "Legs", "Core", "Full body"];
 const UNITS = ["kg", "lbs"];
 
+const PHOTO_BUCKET = "progress-photos";
+const PHOTO_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const PHOTO_REFUSED = "Sorry, only images (JPEG, PNG, WebP or GIF) up to 5 MB can be added.";
+
 const $ = (id) => document.getElementById(id);
 
 let currentUser = null;
@@ -281,6 +286,72 @@ function currentValues(x, session, date) {
   return { values: pick(x), source: "plan" };
 }
 
+// ---------- Progress photos ----------
+
+// Upload an image to the bucket and return its public link, or throw a message.
+async function uploadPhoto(file, folder) {
+  const ext = PHOTO_TYPES[file.type];
+  if (!ext || file.size > PHOTO_MAX_BYTES) throw PHOTO_REFUSED;
+  const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await db.storage.from(PHOTO_BUCKET).upload(path, file, { contentType: file.type });
+  if (error) throw /size|mime|type/i.test(error.message) ? PHOTO_REFUSED : error.message;
+  return db.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+// Upload a photo and add its link to the session, creating the session if needed.
+async function addSessionPhoto(w, date, file) {
+  const url = await uploadPhoto(file, currentUser.id);
+  const s = await ensureSession(w, date);
+  if (!s) throw "Couldn't save the photo to this workout. Please try again.";
+  const photo_urls = [...(s.photo_urls ?? []), url];
+  const { error } = await db.from("sessions").update({ photo_urls }).eq("id", s.id);
+  if (error) throw error.message;
+  s.photo_urls = photo_urls;
+}
+
+function photoLink(url, alt, caption) {
+  return el("a", { href: url, target: "_blank", rel: "noopener", className: "photo" },
+    el("img", { src: url, alt, loading: "lazy" }),
+    caption && el("span", { className: "photo-caption", textContent: caption }));
+}
+
+// Photos on a session card, with the "Add progress photo" button.
+function photoStrip(w, date) {
+  const grid = el("div", { className: "photo-grid" });
+  const draw = () => {
+    grid.innerHTML = "";
+    for (const url of findSession(w.id, date)?.photo_urls ?? []) {
+      grid.append(photoLink(url, `Progress photo, ${longDate(date)}`));
+    }
+  };
+
+  const input = el("input", { type: "file", accept: Object.keys(PHOTO_TYPES).join(","), hidden: true });
+  const button = el("button", { type: "button", className: "secondary photo-btn", textContent: "📷 Add progress photo" });
+  const status = el("span", { className: "muted small" });
+  button.addEventListener("click", () => input.click());
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    input.value = "";
+    if (!file) return;
+    button.disabled = true;
+    status.textContent = "Uploading…";
+    try {
+      await addSessionPhoto(w, date, file);
+      draw();
+      renderProgress();
+      showMessage("app-message", "Photo added. Keep it up! 💪");
+    } catch (msg) {
+      showMessage("app-message", msg, true);
+    } finally {
+      button.disabled = false;
+      status.textContent = "";
+    }
+  });
+
+  draw();
+  return el("div", { className: "photos" }, grid, el("div", { className: "photo-actions" }, button, status, input));
+}
+
 // ---------- This week ----------
 
 function showsOn(w, date) {
@@ -379,6 +450,7 @@ function sessionCard(w, date) {
   const list = exercisesOf(w.id);
   if (!list.length) card.append(el("p", { className: "muted", textContent: "No exercises in this workout." }));
   for (const x of list) card.append(trackRow(w, date, x));
+  card.append(photoStrip(w, date));
 
   const remove = el("button", { className: "link danger small", textContent: "Remove workout" });
   remove.addEventListener("click", async () => {
@@ -655,6 +727,20 @@ function renderProgress() {
   const month = today().slice(0, 7);
   $("stat-week").textContent = done.filter((s) => s.session_date >= week && s.session_date <= addDays(week, 6)).length;
   $("stat-month").textContent = done.filter((s) => s.session_date.startsWith(month)).length;
+
+  // Gallery: every photo, newest session first, newest photo first within a session.
+  const gallery = $("photo-gallery");
+  gallery.innerHTML = "";
+  const photos = [...sessions]
+    .sort((a, b) => b.session_date.localeCompare(a.session_date))
+    .flatMap((s) => [...(s.photo_urls ?? [])].reverse().map((url) => ({ url, s })));
+  if (!photos.length) {
+    gallery.append(el("p", { className: "muted", textContent: "No progress photos yet. Add one to a workout in This week." }));
+  }
+  for (const { url, s } of photos) {
+    const type = workouts.find((w) => w.id === s.workout_id)?.workout_type ?? "Workout";
+    gallery.append(photoLink(url, `Progress photo, ${longDate(s.session_date)}`, `${shortDate(s.session_date)} · ${type}`));
+  }
 
   const list = $("history-list");
   list.innerHTML = "";
