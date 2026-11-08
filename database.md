@@ -129,6 +129,11 @@ One row each time someone presses **Pay with KNET** on the Subscribe tab. Monthl
 
 You're subscribed while you have a `paid` row whose `ends_at` is in the future.
 
+**Who can write payments.** Only the server: the service role, used by the `create-payment` and `payment-callback` edge functions. Three layers protect this, so one mistake later can't open it up:
+1. **Permissions:** website users (logged in or not) can only *read*, and only their own rows. The server can add and update, but nobody can delete or wipe payments; they're a permanent record.
+2. **"Never" policies:** restrictive Row Level Security policies refuse every insert, update and delete from website users. They override any policy added later.
+3. **Column guard:** a database trigger refuses any change to `status`, `amount`, `plan`, `user_id`, `paid_at`, `starts_at`, `ends_at` or `payment_id` unless it comes from the service role.
+
 ### `ai_requests`: the AI rate guard
 
 A behind-the-scenes log of AI requests (coach questions and summaries). Before calling the AI, each edge function asks the database for a slot. **At most 5 AI requests a minute in total** are allowed, so nobody can use up the free OpenRouter allowance (about 50 a day). Nobody can read or change this table from the website; rows older than a day are cleaned up automatically.
