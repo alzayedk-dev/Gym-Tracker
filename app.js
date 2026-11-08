@@ -326,6 +326,8 @@ async function loadAll() {
   sessions = s.data;
   logs = l.data;
   weekSummaries = ws.data;
+  photoLinks.clear();
+  await signPhotos(sessions.flatMap((x) => x.photo_urls ?? []));
   renderWeek();
   renderProgress();
 }
@@ -369,28 +371,45 @@ function currentValues(x, session, date) {
 
 // ---------- Progress photos ----------
 
-// Upload an image to the bucket and return its public link, or throw a message.
+// Photos are private. sessions.photo_urls holds each photo's place in the bucket
+// ("<your user id>/<file>"), and the website asks Supabase for short-lived private links
+// to show them. Only the owner can get those links.
+const PHOTO_LINK_SECONDS = 60 * 60; // a link works for 1 hour; a refresh makes new ones
+const photoLinks = new Map(); // place in bucket -> private link
+
+async function signPhotos(paths) {
+  const missing = [...new Set(paths)].filter((p) => !photoLinks.has(p));
+  if (!missing.length) return;
+  const { data, error } = await db.storage.from(PHOTO_BUCKET).createSignedUrls(missing, PHOTO_LINK_SECONDS);
+  if (error) return showMessage("app-message", "Couldn't load your photos: " + error.message, true);
+  for (const d of data ?? []) if (d.signedUrl) photoLinks.set(d.path, d.signedUrl);
+}
+
+// Upload an image into your own folder and return its place in the bucket, or throw a message.
 async function uploadPhoto(file, folder) {
   const ext = PHOTO_TYPES[file.type];
   if (!ext || file.size > PHOTO_MAX_BYTES) throw PHOTO_REFUSED;
   const path = `${folder}/${crypto.randomUUID()}.${ext}`;
   const { error } = await db.storage.from(PHOTO_BUCKET).upload(path, file, { contentType: file.type });
   if (error) throw /size|mime|type/i.test(error.message) ? PHOTO_REFUSED : error.message;
-  return db.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+  await signPhotos([path]);
+  return path;
 }
 
-// Upload a photo and add its link to the session, creating the session if needed.
+// Upload a photo and add it to the session, creating the session if needed.
 async function addSessionPhoto(w, date, file) {
-  const url = await uploadPhoto(file, currentUser.id);
+  const path = await uploadPhoto(file, currentUser.id);
   const s = await ensureSession(w, date);
   if (!s) throw "Couldn't save the photo to this workout. Please try again.";
-  const photo_urls = [...(s.photo_urls ?? []), url];
+  const photo_urls = [...(s.photo_urls ?? []), path];
   const { error } = await db.from("sessions").update({ photo_urls }).eq("id", s.id);
   if (error) throw error.message;
   s.photo_urls = photo_urls;
 }
 
-function photoLink(url, alt, caption) {
+function photoLink(path, alt, caption) {
+  const url = photoLinks.get(path);
+  if (!url) return el("span", { className: "photo missing", title: "This photo couldn't be loaded" });
   return el("a", { href: url, target: "_blank", rel: "noopener", className: "photo" },
     el("img", { src: url, alt, loading: "lazy" }),
     caption && el("span", { className: "photo-caption", textContent: caption }));

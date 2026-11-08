@@ -280,6 +280,7 @@ label.complete {
   border-radius: 12px; background: var(--field); border: 1px solid var(--border);
 }
 .photo:hover img { border-color: var(--accent); }
+.photo.missing { aspect-ratio: 1; border-radius: 12px; background: var(--field); border: 1px dashed var(--border); }
 .photo-caption { font-size: 0.75rem; font-weight: 600; }
 .gallery > p { grid-column: 1 / -1; margin: 0; }
 .photo-actions { display: flex; align-items: center; gap: 10px; }
