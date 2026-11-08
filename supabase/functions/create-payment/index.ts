@@ -27,40 +27,39 @@ Deno.serve(async (req) => {
   if (mobile && !/^[0-9]{8}$/.test(mobile)) return json({ error: "Please enter an 8-digit Kuwait mobile number." }, 400);
   const email = user.email ?? null;
 
-  // Only this function (with the service role) can write subscriptions.
-  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: row, error } = await admin.from("subscriptions")
-    .insert({
-      user_id: user.id, plan, amount, currency: "KWD", status: "pending",
-      customer_name: name, customer_email: email, customer_mobile: mobile || null,
-    })
-    .select("id").single();
-  if (error) return json({ error: error.message }, 500);
-
+  // 1. Make the MyFatoorah payment link first. If that fails, nothing is saved.
+  let pay;
   try {
     const back = `${url}/functions/v1/payment-callback`;
-    const pay = await myfatoorah("SendPayment", {
+    pay = await myfatoorah("SendPayment", {
       NotificationOption: "LNK",            // just make the link; we send the user there ourselves
       InvoiceValue: amount,
       DisplayCurrencyIso: "KWD",
       CustomerName: name,
       CustomerEmail: email ?? undefined,
       ...(mobile ? { MobileCountryCode: "+965", CustomerMobile: mobile } : {}),
-      CustomerReference: String(row.id),    // our subscription row
-      UserDefinedField: user.id,
+      CustomerReference: user.id,           // who is paying
+      UserDefinedField: plan,
       CallBackUrl: back,                    // MyFatoorah sends the user here after paying...
       ErrorUrl: back,                       // ...or after a failed / cancelled payment
       Language: "en",
       InvoiceItems: [{ ItemName: item, Quantity: 1, UnitPrice: amount }],
     });
-
-    await admin.from("subscriptions").update({ invoice_id: pay.InvoiceId, payment_url: pay.InvoiceURL }).eq("id", row.id);
-    return json({ url: pay.InvoiceURL });
   } catch (msg) {
-    await admin.from("subscriptions").update({
-      status: "failed", failed_at: new Date().toISOString(),
-      failure_reason: typeof msg === "string" ? `Couldn't create the payment link: ${msg}` : "Couldn't create the payment link",
-    }).eq("id", row.id);
     return json({ error: typeof msg === "string" ? msg : "Couldn't start the payment. Please try again." }, 502);
   }
+
+  // 2. Save it as a new 'pending' payment. This function only ever creates pending rows;
+  //    payment-callback is the only place a status changes (after checking with MyFatoorah).
+  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { error } = await admin.from("subscriptions").insert({
+    user_id: user.id, plan, amount, currency: "KWD", status: "pending",
+    customer_name: name, customer_email: email, customer_mobile: mobile || null,
+    invoice_id: pay.InvoiceId, payment_url: pay.InvoiceURL,
+  });
+  if (error) {
+    console.error("Couldn't save payment", pay.InvoiceId, error.message);
+    return json({ error: "Couldn't start the payment. Please try again." }, 500);
+  }
+  return json({ url: pay.InvoiceURL });
 });

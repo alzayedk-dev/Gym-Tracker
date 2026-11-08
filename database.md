@@ -129,10 +129,21 @@ One row each time someone presses **Pay with KNET** on the Subscribe tab. Monthl
 
 You're subscribed while you have a `paid` row whose `ends_at` is in the future.
 
-**Who can write payments.** Only the server: the service role, used by the `create-payment` and `payment-callback` edge functions. Three layers protect this, so one mistake later can't open it up:
-1. **Permissions:** website users (logged in or not) can only *read*, and only their own rows. The server can add and update, but nobody can delete or wipe payments; they're a permanent record.
-2. **"Never" policies:** restrictive Row Level Security policies refuse every insert, update and delete from website users. They override any policy added later.
-3. **Column guard:** a database trigger refuses any change to `status`, `amount`, `plan`, `user_id`, `paid_at`, `starts_at`, `ends_at` or `payment_id` unless it comes from the service role.
+**Who can write payment rows (and `status`)**
+
+| Who | Read | Add / change / delete |
+|-----|------|-----------------------|
+| Logged-out visitors | ❌ | ❌ no permission at all |
+| Customers (logged in) | ✅ their own rows only | ❌ no permission, plus "no writes from the website" policies |
+| Anyone claiming to be an admin in the browser | Same as a customer | ❌ the browser only ever acts as an ordinary logged-in user |
+| `create-payment` (server) | — | Can only **add new `pending`** rows, never change a status |
+| `payment-callback` (server) | — | The **only** code that changes `status`, after checking with MyFatoorah |
+
+A database guard also checks every change, whoever makes it:
+- New rows must start as `pending`.
+- `status` can only move **pending → paid**, **pending → failed**, or **failed → paid** (a retry that succeeds). A `paid` payment is final.
+- Who paid, the plan, the amount and the currency can never change after the row is created.
+- The database owner (you, in the Supabase dashboard) can still correct a row by hand for support.
 
 ### `ai_requests`: the AI rate guard
 
