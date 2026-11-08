@@ -14,7 +14,8 @@ npx serve .
 
 - **New workout**: pick one type (Full body, Upper, Lower), then weekdays (recurring every week) or exact dates (one-off), then add as many exercises as you like: name, sets, reps (a number, AMRAP or max), weight per set, kg/lbs and rest time. Save with **Lets train**.
 - **This week**: every workout on every date, with a **Completed** box. Sets, reps and weights are editable and saved for that date, pre-filled from last time. Filter by type or muscle; step back and forward through weeks.
-- **Progress photos**: add pictures to any session (JPEG, PNG, WebP or GIF, up to 5 MB). They're stored in the public `progress-photos` bucket and shown on the session card and in a gallery.
+- **Progress photos**: add pictures to any session (JPEG, PNG, WebP or GIF, up to 5 MB). They're stored in the private `progress-photos` bucket, in your own folder, and shown on the session card and in a gallery through 1-hour private links.
+- **Profile**: tap your name in the top-right corner to see your email, how you sign in and when you joined, and to set a display name (saved in Supabase Auth user metadata as `display_name`; Google sign-ins start with their Google name).
 - **Progress**: completed workouts this week / this month, the photo gallery and the full list.
 - **Coach**: an AI coach chat for questions about exercises and how to change workout type, reps or exercises. It reads your plan and recent sessions and only gives advice. Runs in the `coach` Supabase Edge Function ([`supabase/functions/coach`](supabase/functions/coach)), which calls a free OpenRouter model using the `OPENROUTER_API_KEY` Supabase secret; logged-in users only, chats aren't saved.
 
@@ -35,6 +36,6 @@ See [database.md](database.md) for a plain-English guide to every table and colu
 | `week_summaries`    | One summary per finished week: muscle balance and coach tips.      |
 | `ai_requests`       | Rate-guard log of AI requests (not readable from the website).     |
 
-Every table has a `user_id` and Row Level Security, so users only see and change their own rows.
+Every table has a `user_id` (the Supabase Auth ID of whoever created the row) and Row Level Security, so users only see and change their own rows. Photos are private to their owner. See the privacy rules in [database.md](database.md#privacy-rules-row-level-security).
 
 Schema lives in [`supabase/migrations`](supabase/migrations). The Supabase URL and publishable key are in `app.js`; the publishable key is safe to expose in a browser.

@@ -295,16 +295,63 @@ db.auth.onAuthStateChange((_event, session) => {
   $("user-bar").hidden = !user;
   resetCoach();
   if (user) {
-    $("user-email").textContent = user.email;
+    showUserInHeader();
+    showTab("week");
     loadAll();
   }
+});
+
+// ---------- Profile ----------
+// The display name lives in Supabase Auth's user metadata (user_metadata.display_name),
+// which only the logged-in user can change. Google sign-ins start with their Google name.
+
+const displayName = (user) =>
+  (user?.user_metadata?.display_name ?? user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? "").trim();
+const initial = (user) => (displayName(user) || user?.email || "?").charAt(0).toUpperCase();
+
+function showUserInHeader() {
+  $("user-name").textContent = displayName(currentUser) || currentUser.email;
+  $("user-avatar").textContent = initial(currentUser);
+}
+
+function renderProfile() {
+  const u = currentUser;
+  const name = displayName(u);
+  $("profile-avatar").textContent = initial(u);
+  $("profile-title").textContent = name ? `Hi, ${name} 👋` : "Your profile";
+  $("profile-email").textContent = u.email;
+  const names = { email: "Email and password", google: "Google" };
+  $("profile-providers").textContent =
+    (u.app_metadata?.providers ?? [u.app_metadata?.provider]).filter(Boolean).map((p) => names[p] ?? p).join(" · ");
+  $("profile-since").textContent = longDate(localDateOf(u.created_at));
+  $("profile-name").value = u.user_metadata?.display_name ?? name;
+  showMessage("profile-message", "");
+}
+
+$("profile-btn").addEventListener("click", () => showTab("profile"));
+$("profile-back").addEventListener("click", () => showTab("week"));
+
+$("profile-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("profile-name").value.replace(/\s+/g, " ").trim();
+  if (name.length > 50) return showMessage("profile-message", "Please keep it to 50 characters or fewer.", true);
+  $("profile-save").disabled = true;
+  const { data, error } = await db.auth.updateUser({ data: { display_name: name || null } });
+  $("profile-save").disabled = false;
+  if (error) return showMessage("profile-message", error.message, true);
+  currentUser = data.user;
+  showUserInHeader();
+  renderProfile();
+  showMessage("profile-message", name ? "Saved ✓" : "Display name removed.");
 });
 
 // ---------- Tabs ----------
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  for (const t of ["week", "new", "progress", "coach"]) $("tab-" + t).hidden = t !== name;
+  for (const t of ["week", "new", "progress", "coach", "profile"]) $("tab-" + t).hidden = t !== name;
+  $("profile-btn").classList.toggle("active", name === "profile");
+  if (name === "profile") renderProfile();
   showMessage("app-message", "");
 }
 document.querySelectorAll(".tabs button").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));

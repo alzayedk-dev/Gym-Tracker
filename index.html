@@ -15,7 +15,10 @@
   <header>
     <h1 class="logo">Lets train <span class="logo-icon" aria-hidden="true">💪</span></h1>
     <div id="user-bar" hidden>
-      <span id="user-email"></span>
+      <button id="profile-btn" class="user-chip" title="Your profile">
+        <span class="user-avatar" id="user-avatar" aria-hidden="true"></span>
+        <span id="user-name"></span>
+      </button>
       <button id="sign-out" class="link">Sign out</button>
     </div>
   </header>
@@ -111,6 +114,32 @@
         <div class="card">
           <h2>Completed workouts</h2>
           <div id="history-list"></div>
+        </div>
+      </div>
+
+      <!-- Profile: email and display name (stored in Supabase Auth user metadata) -->
+      <div id="tab-profile" hidden>
+        <div class="card profile">
+          <div class="profile-head">
+            <span class="profile-avatar" id="profile-avatar" aria-hidden="true"></span>
+            <div>
+              <h2 id="profile-title">Your profile</h2>
+              <p class="muted small">Only you can see this.</p>
+            </div>
+          </div>
+          <dl class="profile-facts">
+            <dt>Email</dt><dd id="profile-email"></dd>
+            <dt>Signs in with</dt><dd id="profile-providers"></dd>
+            <dt>Member since</dt><dd id="profile-since"></dd>
+          </dl>
+          <form id="profile-form">
+            <label>Display name
+              <input type="text" id="profile-name" maxlength="50" autocomplete="nickname" placeholder="What should we call you?">
+            </label>
+            <button type="submit" id="profile-save">Save</button>
+          </form>
+          <p id="profile-message" class="message"></p>
+          <button type="button" id="profile-back" class="link small">← Back to this week</button>
         </div>
       </div>
 

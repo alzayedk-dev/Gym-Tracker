@@ -109,17 +109,36 @@ A behind-the-scenes log of AI requests (coach questions and summaries). Before c
 
 ### `progress-photos` — the photo storage bucket
 
-Not a table: a public folder in Supabase Storage that holds the picture files. The links in `sessions.photo_urls` point here.
+Not a table: a **private** folder in Supabase Storage that holds the picture files. `sessions.photo_urls` stores where each photo sits in it.
 
 | Setting        | Value                          | Why |
 |----------------|--------------------------------|-----|
-| Public         | Yes                            | Anyone with a photo's link can view it, so pictures load on the website without extra steps. |
+| Public         | No                             | Photos can only be opened with a private link that lasts 1 hour, and only the owner can get one. |
 | File types     | JPEG, PNG, WebP, GIF only      | Images that every browser can show. Anything else is refused. |
 | Max size       | 5 MB per file                  | Keeps storage small and pages fast. |
-| Who can upload | Anyone                         | As requested for now. |
+| Who can upload | Logged-in users, into their own folder only | Nobody can add files to someone else's folder, and people who aren't logged in can't upload. |
+| Who can view   | Only the owner                 | Each person can only see the files in their own folder. |
 | Who can delete | Nobody, from the website       | There's no delete permission, so photos can't be removed by accident or by others. |
 
 Files are saved as `<user id>/<random name>.<jpg|png|webp|gif>`, so each person's photos sit in their own folder.
+
+## Privacy rules (Row Level Security)
+
+Every table that holds your data has a `user_id` column. It's filled in automatically with the Supabase Auth ID of whoever created the row, and it links to that login, so if an account is deleted, its rows go with it. On every one of those tables (`workout`, `exercises`, `sessions`, `session_exercises`, `week_summaries`) the same four rules apply, only for logged-in users:
+
+| Rule | What it means |
+|------|---------------|
+| **own read**   | You can only see rows where `user_id` is your ID. Other people's rows are invisible, not just locked. |
+| **own insert** | You can only add rows with your own ID. You can't create a row "as" someone else. |
+| **own update** | You can only change your own rows, and you can't hand a row over to someone else by changing its `user_id`. |
+| **own delete** | You can only delete your own rows. |
+
+On top of that:
+- **People who aren't logged in get nothing.** They can't read, add, change or delete anything in any table.
+- **Links stay inside your own data.** An exercise can only belong to your own workout, a session to your own workout, a logged result to your own session and your own exercise, and a session's photos must be in your own photo folder.
+- **No shortcuts.** The website roles can't empty a whole table (TRUNCATE) or add triggers, which would bypass the rules above.
+- **`ai_requests`** can't be read or changed by anyone from the website at all; only the rate guard touches it.
+- **Your profile** (email, display name, sign-in methods) lives in Supabase Auth, not in these tables. Only you can read or change your own profile, and nobody else can see it.
 
 ## Example rows
 
@@ -211,7 +230,7 @@ The website says: *"Sorry, only images (JPEG, PNG, WebP or GIF) up to 5 MB can b
 Not from the website. There are no delete buttons and the bucket has no delete permission.
 
 **Who can see my progress photos?**
-The bucket is public: anyone who has a photo's link can open it. Links are long and random, so they're hard to guess, but if you share one, whoever gets it can see that picture.
+Only you. The bucket is private: the website asks for a private link that lasts 1 hour, and only the photo's owner can get one. Even if you copy a photo's link and share it, it stops working after an hour.
 
 **Does the AI coach store anything?**
 No. The coach reads your plan and your last few sessions (only your own rows, the same privacy rules apply) to tailor its answers, but it doesn't write to any table and chats aren't saved.
