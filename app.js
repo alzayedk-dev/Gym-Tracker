@@ -392,15 +392,56 @@ $("pay-form").addEventListener("submit", async (e) => {
   if (mobile && mobile.length !== 8) return showMessage("pay-message", "Please enter an 8-digit Kuwait mobile number, or leave it empty.", true);
   $("pay-btn").disabled = true;
   showMessage("pay-message", "🤔 Opening MyFatoorah…");
+
+  // Open the new tab right away, while it still counts as your click (browsers block tabs opened later),
+  // then send it to MyFatoorah once the payment link is ready.
+  const tab = window.open("", "_blank");
+  if (tab) {
+    tab.opener = null;
+    tab.document.title = "Opening MyFatoorah…";
+    tab.document.body.style.cssText = "font-family:system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0";
+    tab.document.body.textContent = "🤔 Opening MyFatoorah…";
+  }
+
   const { data, error } = await db.functions.invoke("create-payment", { body: { plan: selectedPlan, name, mobile } });
+  $("pay-btn").disabled = false;
   if (error || !data?.url) {
+    tab?.close();
     let msg = "Couldn't start the payment. Please try again.";
     try { msg = (await error.context.json()).error ?? msg; } catch {}
-    $("pay-btn").disabled = false;
     return showMessage("pay-message", msg, true);
   }
-  location.href = data.url; // MyFatoorah payment page (amount, your name and contact, KNET)
+
+  if (!tab || tab.closed) {
+    // The browser blocked the new tab: open MyFatoorah here instead.
+    location.href = data.url;
+    return;
+  }
+  tab.location.href = data.url; // MyFatoorah payment page (amount, your name and contact, KNET)
+  waitingForPayment = true;
+  showMessage("pay-message", "MyFatoorah opened in a new tab. Finish paying there; this page updates when you come back.");
 });
+
+// Coming back to this tab after paying in the other one: check whether the subscription is now active.
+let waitingForPayment = false;
+async function refreshSubscription() {
+  if (!waitingForPayment || !currentUser) return;
+  const { data } = await db.from("subscriptions").select("*").order("created_at", { ascending: false });
+  if (!data) return;
+  const wasActive = activeSubscription()?.ends_at;
+  subscriptions = data;
+  renderSubscription();
+  const nowActive = activeSubscription();
+  if (nowActive && nowActive.ends_at !== wasActive) {
+    waitingForPayment = false;
+    showMessage("pay-message", `✅ Payment confirmed. Your AI coach is unlocked until ${niceDate(nowActive.until)}.`);
+  } else if (data[0]?.status === "failed") {
+    waitingForPayment = false;
+    showMessage("pay-message", "The payment didn't go through. You can try again.", true);
+  }
+}
+window.addEventListener("focus", refreshSubscription);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSubscription(); });
 
 // ---------- Profile ----------
 // The display name lives in Supabase Auth's user metadata (user_metadata.display_name),
