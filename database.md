@@ -112,11 +112,20 @@ One row each time someone presses **Pay with KNET** on the Subscribe tab. Monthl
 | `customer_email`  | Text                                   | Your login email; MyFatoorah shows it and sends the receipt there. |
 | `customer_mobile` | 8 digits, can be empty                 | Kuwait mobile (shown as +965…) on the payment page. Optional. |
 | `invoice_id`      | Whole number                           | MyFatoorah's invoice for this attempt. |
+| `invoice_reference` | Text                                 | MyFatoorah's invoice reference, as printed on the receipt. |
 | `payment_id`      | Text                                   | MyFatoorah's payment ID once KNET has answered. |
 | `payment_url`     | Text                                   | The MyFatoorah payment link. |
+| `payment_method`  | Text                                   | How it was paid, as MyFatoorah reports it (e.g. KNET). |
+| `transaction_id`  | Text                                   | MyFatoorah's transaction ID. |
+| `reference_id`    | Text                                   | The bank / KNET reference number, for matching bank statements. |
+| `track_id`        | Text                                   | KNET's track ID. |
+| `authorization_id`| Text                                   | KNET's authorization code (successful payments). |
+| `failure_reason`  | Text                                   | Why it failed, as MyFatoorah explains it (e.g. cancelled, declined). |
 | `starts_at`, `ends_at` | Date and time                     | The time this payment covers. If you renew early, it starts when your current time runs out. |
-| `paid_at`         | Date and time                          | When the payment was confirmed. |
-| `created_at`      | Date and time                          | When the payment link was made. |
+| `created_at`      | Date and time                          | **When the payment was started** (the link was made). |
+| `paid_at`         | Date and time                          | **When the payment was confirmed** by MyFatoorah. |
+| `failed_at`       | Date and time                          | **When it failed or was cancelled.** Every failed row must have one. |
+| `updated_at`      | Date and time                          | **Last time the row changed**, kept up to date automatically. |
 
 You're subscribed while you have a `paid` row whose `ends_at` is in the future.
 

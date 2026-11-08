@@ -57,7 +57,10 @@ Deno.serve(async (req) => {
     await admin.from("subscriptions").update({ invoice_id: pay.InvoiceId, payment_url: pay.InvoiceURL }).eq("id", row.id);
     return json({ url: pay.InvoiceURL });
   } catch (msg) {
-    await admin.from("subscriptions").update({ status: "failed" }).eq("id", row.id);
+    await admin.from("subscriptions").update({
+      status: "failed", failed_at: new Date().toISOString(),
+      failure_reason: typeof msg === "string" ? `Couldn't create the payment link: ${msg}` : "Couldn't create the payment link",
+    }).eq("id", row.id);
     return json({ error: typeof msg === "string" ? msg : "Couldn't start the payment. Please try again." }, 502);
   }
 });

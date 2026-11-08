@@ -32,9 +32,29 @@ Deno.serve(async (req) => {
     return go("payment-success.html", { plan: sub.plan, until: String(sub.ends_at).slice(0, 10) });
   }
 
+  // KNET's details for this attempt (MyFatoorah lists every try on the invoice).
+  type Tx = { PaymentId?: string; PaymentGateway?: string; TransactionId?: string; ReferenceId?: string;
+    TrackId?: string; AuthorizationId?: string; Error?: string; ErrorCode?: string; TransactionStatus?: string };
+  const txs: Tx[] = status.InvoiceTransactions ?? [];
+  const tx = txs.find((t) => String(t.PaymentId) === paymentId) ?? txs[txs.length - 1] ?? {};
+  const details = {
+    payment_id: paymentId,
+    payment_method: tx.PaymentGateway ?? null,
+    transaction_id: tx.TransactionId ? String(tx.TransactionId) : null,
+    reference_id: tx.ReferenceId ? String(tx.ReferenceId) : null,
+    track_id: tx.TrackId ? String(tx.TrackId) : null,
+    authorization_id: tx.AuthorizationId ? String(tx.AuthorizationId) : null,
+    invoice_reference: status.InvoiceReference ? String(status.InvoiceReference) : null,
+  };
+
   const paid = status.InvoiceStatus === "Paid" && Number(status.InvoiceValue) === Number(sub.amount);
   if (!paid) {
-    await admin.from("subscriptions").update({ status: "failed", payment_id: paymentId }).eq("id", sub.id).eq("status", "pending");
+    const reason = status.InvoiceStatus === "Paid"
+      ? `Amount mismatch: paid ${status.InvoiceValue}, expected ${sub.amount}`
+      : [tx.Error, tx.ErrorCode && `(${tx.ErrorCode})`].filter(Boolean).join(" ") || `Invoice status: ${status.InvoiceStatus}`;
+    await admin.from("subscriptions")
+      .update({ ...details, status: "failed", failed_at: new Date().toISOString(), failure_reason: reason.slice(0, 300) })
+      .eq("id", sub.id).eq("status", "pending");
     return go("payment-failed.html", { reason: "declined" });
   }
 
@@ -44,7 +64,10 @@ Deno.serve(async (req) => {
   const end = addMonths(start, PLANS[sub.plan as Plan].months);
 
   const { data: updated, error } = await admin.from("subscriptions")
-    .update({ status: "paid", payment_id: paymentId, paid_at: new Date().toISOString(), starts_at: start.toISOString(), ends_at: end.toISOString() })
+    .update({
+      ...details, status: "paid", paid_at: new Date().toISOString(), failed_at: null, failure_reason: null,
+      starts_at: start.toISOString(), ends_at: end.toISOString(),
+    })
     .eq("id", sub.id).in("status", ["pending", "failed"]) // a retry on the same page after a failed try still counts
     .select("ends_at").maybeSingle();
   if (error || !updated) {
