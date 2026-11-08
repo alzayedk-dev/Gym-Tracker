@@ -97,6 +97,13 @@ Deno.serve(async (req) => {
   const { data: { user } } = await db.auth.getUser(authHeader.replace(/^Bearer\s+/i, ""));
   if (!user) return json({ error: "Please log in to talk to the coach." }, 401);
 
+  // The coach chat is for subscribers: there must be a paid subscription that hasn't run out.
+  const { data: active } = await db.from("subscriptions").select("id")
+    .eq("status", "paid").gt("ends_at", new Date().toISOString()).limit(1);
+  if (!active?.length) {
+    return json({ error: "The AI coach is for subscribers. Open the Subscribe tab to unlock it.", subscribe: true }, 402);
+  }
+
   let body: { messages?: unknown };
   try { body = await req.json(); } catch { return json({ error: "Bad request." }, 400); }
 

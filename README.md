@@ -17,7 +17,8 @@ npx serve .
 - **Progress photos**: add pictures to any session (JPEG, PNG, WebP or GIF, up to 5 MB). They're stored in the private `progress-photos` bucket, in your own folder, and shown on the session card and in a gallery through 1-hour private links.
 - **Profile**: tap your name in the top-right corner to see your email, how you sign in and when you joined, and to set a display name (saved in Supabase Auth user metadata as `display_name`; Google sign-ins start with their Google name).
 - **Progress**: completed workouts this week / this month, the photo gallery and the full list.
-- **Coach**: an AI coach chat for questions about exercises and how to change workout type, reps or exercises. It reads your plan and recent sessions and only gives advice. Runs in the `coach` Supabase Edge Function ([`supabase/functions/coach`](supabase/functions/coach)), which calls a free OpenRouter model using the `OPENROUTER_API_KEY` Supabase secret; logged-in users only, chats aren't saved.
+- **Coach** (subscribers): an AI coach chat for questions about exercises and how to change workout type, reps or exercises. It reads your plan and recent sessions and only gives advice. Runs in the `coach` Supabase Edge Function ([`supabase/functions/coach`](supabase/functions/coach)), which calls a free OpenRouter model using the `OPENROUTER_API_KEY` Supabase secret; logged-in users only, chats aren't saved.
+- **Subscribe**: monthly (3 KD) or yearly (30 KD), paid by KNET on MyFatoorah. The `create-payment` edge function makes a MyFatoorah payment link (amount, customer name, email and mobile); `payment-callback` checks the payment with MyFatoorah, marks the `subscriptions` row paid or failed, and sends the user to `payment-success.html` or `payment-failed.html`. Needs the `MYFATOORAH_API_KEY` Supabase secret (test server by default; set `MYFATOORAH_BASE_URL=https://api.myfatoorah.com` for live). No auto-renewal: a banner reminds you 3 days before it ends.
 
 - **Workout summary**: ticking **Completed** calls the `summarize` edge function. It shows totals (sets, reps, weight lifted), what changed since last time and a short AI coach note under the workout, saved in `sessions.summary`.
 - **Week summary**: when every workout in a week is ticked (or on request for a finished week), the `week-summary` edge function reads your exercise names to work out which muscles you trained ([`_shared/muscles.ts`](supabase/functions/_shared/muscles.ts): your picked muscles, then name matching, then the AI for unknown names) and shows sets per muscle (not trained / light / good / a lot) and AI tips on what needs work or was overworked, saved in `week_summaries`.
@@ -34,6 +35,7 @@ See [database.md](database.md) for a plain-English guide to every table and colu
 | `sessions`          | One workout on one date, with the Completed tick, photo links and summary.  |
 | `session_exercises` | What was actually done for each exercise in a session.             |
 | `week_summaries`    | One summary per finished week: muscle balance and coach tips.      |
+| `subscriptions`     | AI coach payments: plan, amount, status, MyFatoorah IDs, customer. |
 | `ai_requests`       | Rate-guard log of AI requests (not readable from the website).     |
 
 Every table has a `user_id` (the Supabase Auth ID of whoever created the row) and Row Level Security, so users only see and change their own rows. Photos are private to their owner. See the privacy rules in [database.md](database.md#privacy-rules-row-level-security).

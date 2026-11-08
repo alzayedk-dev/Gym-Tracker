@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payment failed · Lets train 💪</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💪</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><h1 class="logo">Lets train <span class="logo-icon" aria-hidden="true">💪</span></h1></header>
+  <main>
+    <section class="card result-page">
+      <div class="result-icon" aria-hidden="true">❌</div>
+      <h2>Payment failed</h2>
+      <p id="detail">The payment didn't go through, so you haven't been charged.</p>
+      <p class="muted small">You can try again with KNET. If money was taken from your account anyway, contact us with the time you paid and we'll sort it out.</p>
+      <div class="actions">
+        <a class="button" href="/?tab=subscribe">Try again</a>
+        <a class="button secondary" href="/">Back to Lets train</a>
+      </div>
+    </section>
+  </main>
+  <script>
+    const reasons = {
+      declined: "The payment was cancelled or declined by KNET, so you haven't been charged.",
+      check: "We couldn't confirm the payment with MyFatoorah right now. If you were charged, please contact us and we'll switch on your subscription.",
+      unknown: "We couldn't match this payment to a subscription. If you were charged, please contact us.",
+      save: "Your payment went through, but we couldn't switch on your subscription. Please contact us and we'll sort it out.",
+      missing: "The payment page didn't send back a payment reference.",
+    };
+    const reason = reasons[new URLSearchParams(location.search).get("reason")];
+    if (reason) document.getElementById("detail").textContent = reason;
+  </script>
+</body>
+</html>

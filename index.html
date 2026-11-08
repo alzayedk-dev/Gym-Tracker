@@ -49,7 +49,12 @@
         <button data-tab="new">New workout</button>
         <button data-tab="progress">Progress</button>
         <button data-tab="coach">Coach</button>
+        <button data-tab="subscribe" class="tab-subscribe">⭐ Subscribe</button>
       </nav>
+      <div id="sub-banner" class="sub-banner" hidden>
+        <span id="sub-banner-text"></span>
+        <button type="button" id="sub-banner-btn" class="link small">Renew</button>
+      </div>
       <p id="app-message" class="message"></p>
 
       <!-- This week: sessions to track -->
@@ -143,6 +148,48 @@
         </div>
       </div>
 
+      <!-- Subscribe: monthly or yearly, paid by KNET on MyFatoorah -->
+      <div id="tab-subscribe" hidden>
+        <div class="card subscribe">
+          <h2>Subscribe for more benefits ⭐</h2>
+          <p id="sub-status" class="sub-status" hidden></p>
+          <ul class="benefits">
+            <li><span aria-hidden="true">🏋️</span><span><strong>AI coach chat:</strong> ask anything about exercises, technique and recovery.</span></li>
+            <li><span aria-hidden="true">🔧</span><span><strong>Workout customization:</strong> advice on changing your workout type, sets, reps, weights and exercises.</span></li>
+            <li><span aria-hidden="true">📈</span><span><strong>Personal to you:</strong> the coach reads your plan and the sessions you've logged.</span></li>
+          </ul>
+
+          <div class="plans" id="plans" role="radiogroup" aria-label="Plan">
+            <button type="button" class="plan" data-plan="monthly" role="radio">
+              <span class="plan-name">Monthly</span>
+              <span class="plan-price">3 KD</span>
+              <span class="muted small">per month</span>
+            </button>
+            <button type="button" class="plan" data-plan="yearly" role="radio">
+              <span class="plan-badge">2 months free</span>
+              <span class="plan-name">Yearly</span>
+              <span class="plan-price">30 KD</span>
+              <span class="muted small">per year (2.5 KD a month)</span>
+            </button>
+          </div>
+
+          <form id="pay-form" class="pay-form" hidden>
+            <label>Name on the payment
+              <input type="text" id="pay-name" maxlength="100" required autocomplete="name">
+            </label>
+            <label>Mobile (optional)
+              <span class="phone-row"><span class="phone-code">+965</span>
+                <input type="tel" id="pay-mobile" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" placeholder="8 digits" autocomplete="tel-national">
+              </span>
+            </label>
+            <p class="muted small">Receipt goes to <strong id="pay-email"></strong></p>
+            <button type="submit" id="pay-btn" class="cta">Pay with KNET</button>
+          </form>
+          <p id="pay-message" class="message"></p>
+          <p class="muted small">You'll be taken to MyFatoorah to pay securely by KNET. KNET can't renew automatically, so we'll remind you 3 days before your subscription ends. Renewing early adds the time on top.</p>
+        </div>
+      </div>
+
       <!-- AI coach -->
       <div id="tab-coach" hidden>
         <div class="card coach">
@@ -153,9 +200,14 @@
               <p class="muted small">Ask about exercises, technique, or how to change your workout type, reps or exercises. It knows your plan and what you've logged.</p>
             </div>
           </div>
-          <div id="coach-log" class="coach-log" aria-live="polite"></div>
-          <div id="coach-suggestions" class="chips small-chips"></div>
-          <form id="coach-form" class="coach-form">
+          <div id="coach-locked" class="coach-locked">
+            <p><strong>🔒 The AI coach is for subscribers.</strong></p>
+            <p class="muted small">Get personal advice on exercises, technique, and how to change your workout type, reps and exercises, from 3 KD a month.</p>
+            <button type="button" id="coach-subscribe">⭐ Subscribe for more benefits</button>
+          </div>
+          <div id="coach-log" class="coach-log" aria-live="polite" hidden></div>
+          <div id="coach-suggestions" class="chips small-chips" hidden></div>
+          <form id="coach-form" class="coach-form" hidden>
             <textarea id="coach-input" rows="2" maxlength="2000" placeholder="Ask your coach…" aria-label="Your question"></textarea>
             <button type="submit" id="coach-send">Send</button>
           </form>

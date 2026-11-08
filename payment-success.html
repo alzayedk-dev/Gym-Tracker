@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payment confirmed · Lets train 💪</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💪</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><h1 class="logo">Lets train <span class="logo-icon" aria-hidden="true">💪</span></h1></header>
+  <main>
+    <section class="card result-page">
+      <div class="result-icon" aria-hidden="true">✅</div>
+      <h2>Payment confirmed</h2>
+      <p id="detail">Thank you! Your subscription is active.</p>
+      <p class="muted small">Your AI coach is unlocked. A receipt from MyFatoorah is on its way to your email.</p>
+      <div class="actions">
+        <a class="button" href="/?tab=coach">Talk to your coach 🏋️</a>
+        <a class="button secondary" href="/">Back to Lets train</a>
+      </div>
+    </section>
+  </main>
+  <script>
+    // The payment was already checked with MyFatoorah before you were sent here; this page only shows the result.
+    const q = new URLSearchParams(location.search);
+    const plan = { monthly: "Monthly", yearly: "Yearly" }[q.get("plan")];
+    const until = /^\d{4}-\d{2}-\d{2}$/.test(q.get("until") ?? "") ? new Date(q.get("until") + "T12:00:00") : null;
+    if (plan && until) {
+      document.getElementById("detail").textContent =
+        `Thank you! Your ${plan} subscription is active until ${until.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`;
+    }
+  </script>
+</body>
+</html>

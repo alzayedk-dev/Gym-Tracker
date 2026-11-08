@@ -21,6 +21,8 @@ let workouts = [];  // workout rows (the plan)
 let exercises = []; // exercises planned in each workout
 let sessions = [];  // one workout on one date, with the completed tick
 let weekSummaries = []; // one saved summary per finished week
+let subscriptions = []; // your payments for the AI coach (read-only from the website)
+let selectedPlan = null; // plan picked on the Subscribe tab
 let logs = [];      // session_exercises: what was actually done
 let weekStart = startOfWeek(today());
 let typeFilter = "";
@@ -188,7 +190,7 @@ function resetCoach() {
   $("coach-log").innerHTML = "";
   $("coach-log").append(coachBubble("assistant",
     "Hi! I'm your coach 💪 Ask me about any exercise, or how to change your workout type, reps or exercises."));
-  $("coach-suggestions").hidden = false;
+  $("coach-suggestions").hidden = !activeSubscription(); // locked until subscribed
 }
 
 async function askCoach(question) {
@@ -209,8 +211,18 @@ async function askCoach(question) {
 
   if (error || !data?.reply) {
     let msg = "The coach couldn't answer right now. Please try again.";
-    try { msg = (await error.context.json()).error ?? msg; } catch {}
+    let needsSubscription = false;
+    try {
+      const body = await error.context.json();
+      msg = body.error ?? msg;
+      needsSubscription = Boolean(body.subscribe);
+    } catch {}
     coachMessages.pop(); // let them ask again without a gap in the chat
+    if (needsSubscription) {
+      // Subscription ran out while the page was open: refresh it so the coach shows as locked.
+      subscriptions = (await db.from("subscriptions").select("*").order("created_at", { ascending: false })).data ?? [];
+      renderSubscription();
+    }
     log.append(el("div", { className: "bubble error", textContent: msg }));
   } else {
     coachMessages.push({ role: "assistant", content: data.reply });
@@ -294,11 +306,100 @@ db.auth.onAuthStateChange((_event, session) => {
   $("app-view").hidden = !user;
   $("user-bar").hidden = !user;
   resetCoach();
+  subscriptions = [];
+  selectedPlan = null;
   if (user) {
     showUserInHeader();
-    showTab("week");
+    // ?tab=coach / ?tab=subscribe opens that tab (used by the payment success and failed pages).
+    const wanted = new URLSearchParams(location.search).get("tab");
+    showTab(["week", "new", "progress", "coach", "subscribe", "profile"].includes(wanted) ? wanted : "week");
+    if (wanted) history.replaceState(null, "", location.pathname);
     loadAll();
   }
+});
+
+// ---------- Subscription (AI coach) ----------
+// Paid by KNET on MyFatoorah through the create-payment edge function. The website can only
+// read your subscription rows; the payment-callback edge function marks them paid after
+// checking with MyFatoorah.
+
+const PLAN_INFO = { monthly: { label: "Monthly", price: "3 KD" }, yearly: { label: "Yearly", price: "30 KD" } };
+const REMIND_DAYS = 3;
+
+function activeSubscription() {
+  const now = Date.now();
+  const paid = subscriptions.filter((x) => x.status === "paid" && new Date(x.ends_at).getTime() > now);
+  if (!paid.length) return null;
+  const last = paid.reduce((a, b) => (new Date(a.ends_at) > new Date(b.ends_at) ? a : b));
+  return { ...last, until: new Date(last.ends_at) };
+}
+
+const niceDate = (d) => d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+function renderSubscription() {
+  if (!currentUser) return;
+  const active = activeSubscription();
+
+  // Coach tab: locked unless subscribed (the coach function checks this too).
+  $("coach-locked").hidden = Boolean(active);
+  $("coach-log").hidden = !active;
+  $("coach-form").hidden = !active;
+  $("coach-suggestions").hidden = !active || coachMessages.length > 0;
+
+  // Reminder banner, 3 days before it ends.
+  const daysLeft = active ? Math.ceil((active.until - Date.now()) / 86400000) : null;
+  $("sub-banner").hidden = !(active && daysLeft <= REMIND_DAYS);
+  if (active && daysLeft <= REMIND_DAYS) {
+    $("sub-banner-text").textContent =
+      `⏰ Your AI coach subscription ends ${daysLeft <= 1 ? "within a day" : `in ${daysLeft} days`} (${niceDate(active.until)}).`;
+  }
+
+  // Subscribe tab.
+  const status = $("sub-status");
+  status.hidden = !active;
+  if (active) {
+    status.textContent = `✅ You're subscribed (${PLAN_INFO[active.plan].label}) until ${niceDate(active.until)}. ` +
+      "Paying again adds the time on top.";
+  }
+  document.querySelectorAll(".plan").forEach((b) => {
+    const on = b.dataset.plan === selectedPlan;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", String(on));
+  });
+  $("pay-form").hidden = !selectedPlan;
+  if (selectedPlan) {
+    $("pay-btn").textContent = `${active ? "Renew" : "Pay"} ${PLAN_INFO[selectedPlan].price} with KNET`;
+    $("pay-email").textContent = currentUser.email;
+    if (!$("pay-name").value) $("pay-name").value = displayName(currentUser);
+    if (!$("pay-mobile").value) $("pay-mobile").value = subscriptions.find((x) => x.customer_mobile)?.customer_mobile ?? "";
+  }
+}
+
+document.querySelectorAll(".plan").forEach((b) => b.addEventListener("click", () => {
+  selectedPlan = b.dataset.plan;
+  showMessage("pay-message", "");
+  renderSubscription();
+  $("pay-name").focus({ preventScroll: true });
+}));
+$("coach-subscribe").addEventListener("click", () => showTab("subscribe"));
+$("sub-banner-btn").addEventListener("click", () => showTab("subscribe"));
+
+$("pay-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("pay-name").value.trim();
+  const mobile = $("pay-mobile").value.replace(/\D/g, "");
+  if (!name) return showMessage("pay-message", "Please enter your name.", true);
+  if (mobile && mobile.length !== 8) return showMessage("pay-message", "Please enter an 8-digit Kuwait mobile number, or leave it empty.", true);
+  $("pay-btn").disabled = true;
+  showMessage("pay-message", "🤔 Opening MyFatoorah…");
+  const { data, error } = await db.functions.invoke("create-payment", { body: { plan: selectedPlan, name, mobile } });
+  if (error || !data?.url) {
+    let msg = "Couldn't start the payment. Please try again.";
+    try { msg = (await error.context.json()).error ?? msg; } catch {}
+    $("pay-btn").disabled = false;
+    return showMessage("pay-message", msg, true);
+  }
+  location.href = data.url; // MyFatoorah payment page (amount, your name and contact, KNET)
 });
 
 // ---------- Profile ----------
@@ -349,7 +450,8 @@ $("profile-form").addEventListener("submit", async (e) => {
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  for (const t of ["week", "new", "progress", "coach", "profile"]) $("tab-" + t).hidden = t !== name;
+  for (const t of ["week", "new", "progress", "coach", "subscribe", "profile"]) $("tab-" + t).hidden = t !== name;
+  if (name === "subscribe" || name === "coach") renderSubscription();
   $("profile-btn").classList.toggle("active", name === "profile");
   if (name === "profile") renderProfile();
   showMessage("app-message", "");
@@ -359,13 +461,16 @@ document.querySelectorAll(".tabs button").forEach((btn) => btn.addEventListener(
 // ---------- Data ----------
 
 async function loadAll() {
-  const [w, e, s, l, ws] = await Promise.all([
+  const [w, e, s, l, ws, sub] = await Promise.all([
     db.from("workout").select("*").order("created_at"),
     db.from("exercises").select("*").order("position").order("created_at"),
     db.from("sessions").select("*"),
     db.from("session_exercises").select("*"),
     db.from("week_summaries").select("*"),
+    db.from("subscriptions").select("*").order("created_at", { ascending: false }),
   ]);
+  subscriptions = sub.data ?? [];
+  renderSubscription();
   const error = w.error || e.error || s.error || l.error || ws.error;
   if (error) return showMessage("app-message", error.message, true);
   workouts = w.data;

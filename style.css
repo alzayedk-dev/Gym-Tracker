@@ -468,6 +468,57 @@ button.cta {
 .week-summary { border-color: var(--done); }
 .week-summary .cta-small { align-self: flex-start; }
 
+/* ---------- Subscribe & payments ---------- */
+
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: 1 0 auto; white-space: nowrap; }
+.tabs .tab-subscribe { color: var(--accent); }
+.subscribe { display: flex; flex-direction: column; gap: 14px; }
+.subscribe h2 { margin: 0; }
+.subscribe > p { margin: 0; }
+.sub-status { background: var(--done-soft); color: var(--done); font-weight: 700; border-radius: 12px; padding: 10px 14px; }
+.benefits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.benefits li { display: flex; gap: 10px; align-items: flex-start; line-height: 1.45; }
+.plans { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plan {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: var(--field); color: var(--text); text-align: left;
+  border: 2px solid transparent; border-radius: 16px; padding: 16px; font-weight: 600;
+}
+.plan.on { border-color: var(--accent); background: var(--accent-soft); }
+.plan-name { font-size: 0.95rem; }
+.plan-price { font-size: 1.6rem; font-weight: 800; }
+.plan-badge {
+  position: absolute; top: -10px; right: 12px; font-size: 0.7rem; font-weight: 800; color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-radius: 999px; padding: 3px 9px;
+}
+.pay-form { display: flex; flex-direction: column; gap: 12px; }
+.pay-form p { margin: 0; }
+.phone-row { display: flex; gap: 6px; align-items: center; }
+.phone-code { font-weight: 700; color: var(--muted); background: var(--field); border-radius: 10px; padding: 11px 10px; }
+.phone-row input { flex: 1; }
+.sub-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
+  background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 14px;
+  padding: 10px 14px; margin-bottom: 12px; font-weight: 600; font-size: 0.9rem;
+}
+.coach-locked { text-align: center; padding: 24px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.coach-locked p { margin: 0; }
+.coach-locked button { margin-top: 8px; }
+
+/* Payment result pages */
+.result-page { max-width: 480px; margin: 40px auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.result-page .result-icon { font-size: 3rem; }
+.result-page h2 { margin: 0; }
+.result-page p { margin: 0; line-height: 1.5; }
+.result-page .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+.result-page a.button {
+  display: inline-block; text-decoration: none; font-weight: 700; border-radius: 12px; padding: 12px 18px;
+  color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+.result-page a.button.secondary { color: var(--text); background: var(--field); }
+
 /* ---------- Laptop ---------- */
 
 @media (min-width: 1024px) {

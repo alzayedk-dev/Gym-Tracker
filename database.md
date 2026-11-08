@@ -96,6 +96,30 @@ One row per person per week, made when every workout in the week is ticked **Com
 
 Rule: one summary per person per week.
 
+### `subscriptions`: payments for the AI coach
+
+One row each time someone presses **Pay with KNET** on the Subscribe tab. Monthly is 3 KD, yearly is 30 KD, paid by KNET on MyFatoorah. Rows are written **only** by the payment edge functions. You can read your own rows (to see if you're subscribed), but nobody can add or change them from the website, so nobody can mark themselves as paid.
+
+| Column            | Type                                   | Why it's there |
+|-------------------|----------------------------------------|----------------|
+| `id`              | Whole number, given automatically      | A unique number for each payment attempt. Sent to MyFatoorah as the "customer reference". |
+| `user_id`         | User ID                                | Who is paying. |
+| `plan`            | `monthly` or `yearly`                  | Which plan they chose. |
+| `amount`          | Number (3 decimals)                    | The price, set by the server (3 or 30), never by the browser. |
+| `currency`        | Text (`KWD`)                           | Kuwaiti dinar. |
+| `status`          | `pending`, `paid` or `failed`          | `pending` when the payment link is made, then `paid` or `failed` once MyFatoorah confirms. |
+| `customer_name`   | Text                                   | The name shown on the MyFatoorah payment page. |
+| `customer_email`  | Text                                   | Your login email; MyFatoorah shows it and sends the receipt there. |
+| `customer_mobile` | 8 digits, can be empty                 | Kuwait mobile (shown as +965…) on the payment page. Optional. |
+| `invoice_id`      | Whole number                           | MyFatoorah's invoice for this attempt. |
+| `payment_id`      | Text                                   | MyFatoorah's payment ID once KNET has answered. |
+| `payment_url`     | Text                                   | The MyFatoorah payment link. |
+| `starts_at`, `ends_at` | Date and time                     | The time this payment covers. If you renew early, it starts when your current time runs out. |
+| `paid_at`         | Date and time                          | When the payment was confirmed. |
+| `created_at`      | Date and time                          | When the payment link was made. |
+
+You're subscribed while you have a `paid` row whose `ends_at` is in the future.
+
 ### `ai_requests`: the AI rate guard
 
 A behind-the-scenes log of AI requests (coach questions and summaries). Before calling the AI, each edge function asks the database for a slot. **At most 5 AI requests a minute in total** are allowed, so nobody can use up the free OpenRouter allowance (about 50 a day). Nobody can read or change this table from the website; rows older than a day are cleaned up automatically.
@@ -240,6 +264,15 @@ Tick **Completed** and the `summarize` edge function adds up that workout and as
 
 **How does it know which muscles I worked?**
 It reads the exercise names you typed. If you picked muscles on an exercise card, those are used. Otherwise the name is matched against common gym words: "bench press" → Chest, "pullup" → Back, "dips" → Chest + Arms, "back squat" → Legs, "leg raise" → Core, and so on. Any name it still doesn't recognise is sent to the AI to work out (this uses one of the 5-a-minute AI requests). If even that fails, the summary lists those exercises so you can pick their muscles yourself.
+
+**How does paying work?**
+On the **⭐ Subscribe** tab, pick Monthly (3 KD) or Yearly (30 KD), check your name and (optionally) mobile, and press **Pay with KNET**. The `create-payment` edge function makes a pending row and a MyFatoorah payment link showing the amount, your name, email and mobile. You pay by KNET there. MyFatoorah then sends you to the `payment-callback` edge function, which asks MyFatoorah whether it was really paid and for the right amount. If it was, your row becomes `paid` and you land on the **Payment confirmed** page. Otherwise you land on **Payment failed**. The MyFatoorah key is the Supabase secret `MYFATOORAH_API_KEY` and never reaches the browser.
+
+**What does subscribing unlock?**
+The AI coach chat. Workout and week summaries (including their AI notes) stay free. The coach function checks for an active subscription itself, so it can't be skipped from the browser.
+
+**Does it renew automatically?**
+No, KNET can't charge automatically. A banner appears 3 days before your subscription ends, and paying again adds the time on top of what you have left.
 
 **What if the AI fails or is busy?**
 The numbers still show and are saved. The note box stays empty for you to write your own, and you can always edit the note.
