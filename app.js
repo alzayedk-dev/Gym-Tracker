@@ -4,6 +4,15 @@ const SUPABASE_KEY = "sb_publishable_v7iY0ay8IGvxuRMCBrqz0w_LHlckcaw";
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// True when the site is running inside the Lets train phone app (the Expo app sets this flag).
+const IN_APP = window.LETS_TRAIN_APP === true;
+if (IN_APP) {
+  document.documentElement.classList.add("in-app");
+  // Google doesn't allow its sign-in inside apps that show a website, so the app uses email and password.
+  document.getElementById("google-sign-in").hidden = true;
+  document.querySelector("#auth-view .divider").hidden = true;
+}
+
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const TYPES = ["Full body", "Upper", "Lower"];
 const MUSCLES = ["Chest", "Back", "Arms", "Shoulders", "Legs", "Core", "Full body"];
@@ -394,8 +403,9 @@ $("pay-form").addEventListener("submit", async (e) => {
   showMessage("pay-message", "🤔 Opening MyFatoorah…");
 
   // Open the new tab right away, while it still counts as your click (browsers block tabs opened later),
-  // then send it to MyFatoorah once the payment link is ready.
-  const tab = window.open("", "_blank");
+  // then send it to MyFatoorah once the payment link is ready. Inside the phone app there are no tabs,
+  // so MyFatoorah opens on the same screen and comes back to the success / failed page after paying.
+  const tab = IN_APP ? null : window.open("", "_blank");
   if (tab) {
     tab.opener = null;
     tab.document.title = "Opening MyFatoorah…";
