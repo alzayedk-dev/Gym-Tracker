@@ -281,19 +281,37 @@ $("auth-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = $("auth-email").value.trim();
   const password = $("auth-password").value;
-
-  if (signUpMode) {
-    const { data, error } = await db.auth.signUp({ email, password });
-    if (error) return showMessage("auth-message", error.message, true);
-    if (!data.session) {
-      setAuthMode(false);
-      showMessage("auth-message", "Check your email to confirm your account, then log in.");
+  const button = $("auth-submit");
+  if (button.disabled) return; // already working: a second tap would send a second email
+  button.disabled = true;
+  try {
+    if (signUpMode) {
+      const { data, error } = await db.auth.signUp({ email, password });
+      if (error) return showMessage("auth-message", friendlyAuthError(error), true);
+      if (!data.session) {
+        setAuthMode(false);
+        showMessage("auth-message", `Account created! We sent a confirmation link to ${email}. Open it (check spam too), then log in here.`);
+      }
+    } else {
+      const { error } = await db.auth.signInWithPassword({ email, password });
+      if (error) return showMessage("auth-message", friendlyAuthError(error), true);
     }
-  } else {
-    const { error } = await db.auth.signInWithPassword({ email, password });
-    if (error) return showMessage("auth-message", error.message, true);
+  } finally {
+    button.disabled = false;
   }
 });
+
+// Plain-English versions of Supabase's sign-in errors.
+function friendlyAuthError(error) {
+  const code = error.code ?? "";
+  if (code === "over_email_send_rate_limit" || error.status === 429) {
+    return "We already sent you a confirmation email. Check your inbox and spam folder, then log in. You can ask for another email in a minute.";
+  }
+  if (code === "email_not_confirmed") return "Please confirm your email first: open the link we sent you (check spam too), then log in.";
+  if (code === "invalid_credentials") return "Wrong email or password. If you just signed up, confirm your email first.";
+  if (code === "user_already_exists") return "There's already an account with this email. Log in instead.";
+  return error.message;
+}
 
 $("google-sign-in").addEventListener("click", async () => {
   const { error } = await db.auth.signInWithOAuth({
