@@ -5,7 +5,7 @@ const SUPABASE_KEY = "sb_publishable_v7iY0ay8IGvxuRMCBrqz0w_LHlckcaw";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // True when the site is running inside the Lets train phone app (the Expo app sets this flag).
-const IN_APP = window.LETS_TRAIN_APP === true;
+const IN_APP = window.LETS_TRAIN_APP === true || /LetsTrainApp\//.test(navigator.userAgent);
 if (IN_APP) {
   document.documentElement.classList.add("in-app");
   // Google doesn't allow its sign-in inside apps that show a website, so the app uses email and password.
