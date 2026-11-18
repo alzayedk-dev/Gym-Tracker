@@ -24,6 +24,16 @@ npx serve .
 - **Week summary**: when every workout in a week is ticked (or on request for a finished week), the `week-summary` edge function reads your exercise names to work out which muscles you trained ([`_shared/muscles.ts`](supabase/functions/_shared/muscles.ts): your picked muscles, then name matching, then the AI for unknown names) and shows sets per muscle (not trained / light / good / a lot) and AI tips on what needs work or was overworked, saved in `week_summaries`.
 - **AI safety**: the browser only calls Supabase edge functions, never OpenRouter. A rate guard (`ai_take_slot`) allows at most 5 AI requests a minute in total. If the AI fails or is limited, the numbers still show and you can write the note yourself.
 
+## Phone app (Expo Go)
+
+The [`mobile`](mobile) folder is a small Expo app (SDK 58) that shows the live site full screen in a web view, so the app always has the latest version of the website. Inside the app, payments open on the same screen and Google sign-in is hidden (Google blocks it inside apps), so use email and password.
+
+To try it on your phone:
+
+1. Install **Expo Go** from the App Store or Google Play.
+2. On your computer, in the `mobile` folder: `npm install`, then `npx expo start --tunnel` (on Windows PowerShell use `npx.cmd`).
+3. Scan the QR code: with the Camera app on iPhone, or from inside Expo Go on Android.
+
 ## Database
 
 See [database.md](database.md) for a plain-English guide to every table and column.
